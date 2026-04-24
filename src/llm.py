@@ -69,16 +69,19 @@ Now analyze this new segment of the meeting:
 Transcript segment:
 {new_transcript}
 
+IMPORTANT: Respond in ENGLISH even if the meeting was in Tagalog or mixed English/Tagalog.
+
 Update the summary to incorporate this new segment. Keep the same structure:
-- Executive Summary (3 sentences)
-- Key Decisions (with names)
-- Action Items (with owners and deadlines)
+- Executive Summary (3 sentences in English)
+- Key Decisions (with names, in English)
+- Action Items (with owners and deadlines, in English)
 - Open Questions
 
 Rules:
 - Do NOT invent names
 - Do NOT repeat information already in the summary
 - Focus on NEW information from this segment
+- Respond in English
 
 Updated summary:"""
     else:
@@ -102,14 +105,18 @@ def _build_extraction_prompt(transcript: str) -> str:
     """Build the standard extraction prompt."""
     return f"""You are an executive meeting analyst.
 
-Analyze the transcript and extract:
+Analyze the meeting transcript and extract the key information.
 
-1. Executive Summary (exactly 3 sentences)
+IMPORTANT: The meeting may be in English, Tagalog, or mixed. Respond in ENGLISH regardless of the input language.
+
+Extract:
+
+1. Executive Summary (exactly 3 sentences in English)
 2. Key Decisions
-   - Decision
+   - Decision (in English)
    - Decision-maker (name)
 3. Action Items
-   - Task
+   - Task (in English)
    - Owner (must be named)
    - Deadline (infer if needed)
 4. Open Questions
@@ -117,6 +124,7 @@ Analyze the transcript and extract:
 Rules:
 - Do NOT invent names
 - Do NOT use vague terms like "team"
+- Respond in English even if input is Tagalog/mixed
 - Be concise and structured
 
 Transcript:
