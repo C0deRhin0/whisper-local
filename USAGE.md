@@ -1,4 +1,4 @@
-# Meeting Analyzer — Usage Guide
+# Whisper Local — Usage Guide
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ ollama pull llama3.2:3b
 2. **Python venv activated**
 
 ```bash
-cd /path/to/meeting-analyzer
+cd /path/to/whisper-local
 source .venv/bin/activate
 ```
 
