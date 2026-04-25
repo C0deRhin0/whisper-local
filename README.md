@@ -2,141 +2,108 @@
 
 > Transcribe meeting audio and extract structured insights — entirely offline.
 
-⚠️ **Proof of Concept** — This project demonstrates local transcription + LLM processing. Quality improves with better hardware and models.
+A local transcription + LLM system for analyzing meeting recordings. 100% offline, privacy-first.
 
 ## Features
 
 - **100% local** — No cloud APIs, no data leaves your machine
-- **Long audio support** — Handles 60+ minute meetings with streaming chunked processing
-- **Structured output** — Extracts decisions, action items, owners, deadlines
+- **Long audio support** — Handles 60+ minute meetings with chunked processing
+- **Structured output** — Extracts decisions, action items, owners
 - **Privacy-first** — Your meeting data stays on your machine
 - **Multiple formats** — Works with WAV, MP3, M4A, AAC, OGG, AIFF, FLAC
-- **On-the-fly processing** — Starts immediately, no pre-calculation
-- **Audio cleanup** — Filters repetitions and filler from rugged recordings
+- **Smart chunking** — 3-min chunks with 15s overlap for context
+- **Real-time progress** — Accurate progress bar + timeline
+- **Audio cleanup** — Filters repetitions from rugged recordings
+- **Web UI** — Beautiful browser interface for non-tech users
+- **Server control** — Easy start/stop script manages everything
 
 ## Requirements
 
 - macOS (Linux support coming)
 - [Homebrew](https://brew.sh)
 - 4GB+ RAM recommended
-- **ffmpeg** (for non-WAV formats): `brew install ffmpeg`
+- **ffmpeg**: `brew install ffmpeg`
 
 ## Quick Start
 
 ```bash
-# 1. Clone and enter project
+# Clone and enter project
 git clone https://github.com/yourusername/whisper-local.git
 cd whisper-local
 
-# 2. Create and activate virtual environment
+# Create and activate virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
 
-# 3. Install dependencies
+# Install dependencies
 pip install -r requirements.txt
 
-# 4. Setup whisper.cpp (transcription engine)
-git clone https://github.com/ggerganov/whisper.cpp.git whisper.cpp
-cd whisper.cpp
-make -j
-bash ./models/download-ggml-model.sh small  # ~465MB
-cd ..
+# Start everything (Ollama + Web UI)
+./serverctl start
+```
 
-# 5. Start Ollama (in another terminal)
-brew services start ollama
-ollama pull llama3.2:3b
+Then open **http://localhost:8080** in your browser.
 
-# 6. Run with a file
+## Usage
+
+### Via Web UI (Recommended)
+
+```bash
+./serverctl start    # Start
+./serverctl stop     # Stop
+./serverctl status  # Check status
+```
+
+1. Open http://localhost:8080
+2. Upload audio file OR set duration and record
+3. Watch real-time progress bar and timeline
+4. View summary and transcript
+5. Download as text files
+
+### Via CLI
+
+```bash
+# Process a file
 python src/app.py path/to/meeting.wav
-```
 
-Or record from microphone:
-
-```bash
+# Or record from microphone
 python src/app.py
 ```
 
-## Realistic Usage
+## Progress Tracking
 
-Here's how you'd use Whisper Local for a weekly team meeting:
+The web UI shows accurate progress:
 
-### Step 1: Record the meeting (before)
+| Phase | Progress | Description |
+|-------|----------|-------------|
+| Preparing | 1-5% | File upload/recording |
+| Preparing audio | 5-15% | Audio splitting |
+| Transcribing | 15-55% | Speech-to-text (per chunk) |
+| Analyzing | 55-90% | LLM summarization (per chunk) |
+| Saving | 90-98% | Saving results |
+| Complete | 100% | Done |
 
-Record using your video conferencing app (Zoom/Meet/Teams) and download the audio:
-
-```
-# In Zoom: Recording → Download
-# In Meet: More → Download meeting recording
-# In Teams: Meeting chat → Download
-```
-
-### Step 2: Process the audio
-
-```bash
-cd /path/to/whisper-local
-source .venv/bin/activate
-
-# Option A: From file
-python src/app.py recordings/team-standup-feb-14.wav
-
-# Option B: Direct from microphone (30 sec demo)
-python src/app.py
-
-# Option C: Custom mic duration
-python src/app.py --duration 120   # 2 min recording
-```
-
-### Step 3: Get your summary
-
-Output is saved to `summaries/meeting_YYYYMMDD_HHMMSS.md`:
-
-```markdown
-## Executive Summary
-The team reviewed Q1 progress. Key focus areas are product launch in March, 
-hiring two additional engineers, and addressing customer feedback on the beta.
-
-## Decisions
-- Proceed with March product launch — Sarah
-- Open 2 senior engineer roles — David
-
-## Action Items
-- Finalize launch timeline — Sarah — Feb 28
-- Post job listings — David — Feb 21
-- Schedule beta user interviews — Jordan — Feb 24
-
-## Open Questions
-- Should we delay launch by one week for more testing?
-```
-
-### Step 4: Review and share
-
-Open the markdown file, copy relevant sections to Notion/Slack/email, or paste into your task tracker.
-
-### Weekly workflow
-
-```bash
-# Monday: Download recording
-# Tuesday:
-source .venv/bin/activate
-python src/app.py monday-meeting.wav
-# Files auto-saved to summaries/
-```
+Timeline shows each step with timestamps and status dots.
 
 ## Project Structure
 
 ```
 whisper-local/
+├── serverctl           # Server control script
+├── run.sh             # Simple launcher
 ├── src/
-│   ├── app.py            # CLI entry point
-│   ├── pipeline.py       # Main orchestration
-│   ├── recorder.py       # Microphone recording
-│   ├── transcriber.py    # whisper.cpp wrapper
-│   ├── llm.py            # Ollama integration
-│   ├── audio_utils.py    # Long-audio chunking
-│   └── storage.py        # Output persistence
-├── summaries/             # Generated meeting notes
-├── whisper.cpp/         # Local transcription engine
-└── USAGE.md             # Detailed usage guide
+│   ├── app.py        # CLI entry point
+│   ├── webui.py      # Web UI (Flask)
+│   ├── pipeline.py    # Main processing pipeline
+│   ├── progress.py   # Progress tracking
+│   ├── recorder.py   # Microphone recording
+│   ├── transcriber.py # whisper.cpp wrapper
+│   ├── llm.py       # Ollama integration
+│   ├── audio_utils.py # Smart audio chunking
+│   └── storage.py    # Output persistence
+├── summaries/         # Generated meeting notes
+├── whisper.cpp/      # Local transcription engine
+└── requirements.txt   # Python dependencies
 ```
 
 ## How It Works
@@ -146,36 +113,48 @@ Audio Input → whisper.cpp → Transcript → Ollama → Structured Summary
   (WAV)        (local STT)     (text)      (local LLM)     (markdown)
 ```
 
-### Architecture
+1. **Audio** — Load a file or record from microphone
+2. **Split** — Divides into 3-min chunks with 15s overlap
+3. **Transcribe** — whisper-cli converts speech to text locally
+4. **Analyze** — Ollama extracts decisions, action items (cumulatively for chunks)
+5. **Save** — Results saved to `summaries/meeting_<timestamp>.md`
 
+## Web UI Features
+
+- Beautiful midnight blue gradient background
+- Glassmorphism cards with blur effect
+- **Accurate progress bar that fills 0-100%**
+- **Real-time timeline with timestamps**
+- **Chunk tracking** (1/3, 2/3, etc.)
+- Progress phase name displayed
+- Download Summary/Transcript as text files
+- Auto-cleanup of temp files
+- Page refresh resets state
+- Access from phone/tablet on same network
+
+## Server Control
+
+The `serverctl` script manages everything:
+
+```bash
+./serverctl start   # Start Ollama + Web UI together
+./serverctl stop    # Stop both when done
+./serverctl restart
+./serverctl status
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Whisper Local                           │
-├─────────────────────────────────────────────────────────────┤
-│  app.py                                               │
-│    └→ pipeline.py (orchestration)                       │
-│         ├→ recorder.py    (PyAudio → WAV)               │
-│         ├→ transcriber.py (subprocess → whisper-cli)     │
-│         ├→ llm.py       (requests → Ollama API)       │
-│         ├→ audio_utils.py (chunking for long audio)       │
-│         └→ storage.py   (markdown output)               │
-└─────────────────────────────────────────────────────────────┘
-```
 
-1. **Audio** — Load a file or record from microphone (PyAudio)
-2. **Transcribe** — whisper-cli (from whisper.cpp) converts speech to text locally
-3. **Analyze** — Ollama extracts decisions, action items, owners
-4. **Save** — Results saved to `summaries/meeting_<timestamp>.md`
+**Features:**
+- Starts Ollama automatically (if not running as system service)
+- Starts Web UI on http://localhost:8080
+- Shows network URL for phone access
+- Stops both when done (only if started by script)
 
-### Why whisper.cpp?
+## Configuration
 
-This project uses [whisper.cpp](https://github.com/ggerganov/whisper.cpp) instead of the original OpenAI Python package:
-
-- **No Python/PyTorch required** — Runs as a standalone binary
-- **CPU + Apple Metal** — Works on Mac without GPU
-- **Small footprint** — ~465MB model (small) vs 1GB+ (PyTorch)
-- **100% offline** — No API calls to OpenAI
-- **Handles rugged audio** — Built-in filtering of repetitions and filler
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--duration` | 30s | Recording duration (mic) |
+| `chunk_duration` | 180s (3min) | Audio chunk size |
 
 ## Output Format
 
@@ -195,157 +174,68 @@ Each run produces:
 - [Unresolved issue]
 ```
 
-## Configuration
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--duration` | 30s | Recording duration (mic) |
-| `chunk_duration` | 300s (5min) | Audio chunk size for long files |
-
-## Improving Quality
-
-This is a proof of concept. To improve:
-
-### Better Transcription Model
+## Setup (First Time)
 
 ```bash
-# Download better whisper model
-cd whisper.cpp
-bash ./models/download-ggml-model.sh medium  # ~1.5GB, best accuracy
-
-# Then edit src/transcriber.py:
-# Change: "ggml-small.bin" → "ggml-medium.bin"
-```
-
-### Better LLM
-
-```bash
-# More capable model (7B vs 3B)
-ollama pull llama3.2:7b
-
-# Then edit src/llm.py:
-DEFAULT_MODEL = "llama3.2:7b"
-```
-
-### Multilingual Support
-
-```bash
-ollama pull llama3.2:latest  # Better for mixed language
-
-# Then edit src/llm.py:
-DEFAULT_MODEL = "llama3.2:latest"
-```
-
-## Setup
-
-### whisper.cpp (transcription engine)
-
-```bash
-# Clone and build
+# 1. Setup whisper.cpp (if not already)
 git clone https://github.com/ggerganov/whisper.cpp.git whisper.cpp
 cd whisper.cpp
 make -j
+bash ./models/download-ggml-model.sh small  # ~465MB
 
-# Download small model (recommended - best accuracy/speed balance)
-bash ./models/download-ggml-model.sh small
+# 2. Setup Ollama (if not already)
+brew install ollama
+ollama pull llama3.2:3b
 
-# Or download base model (faster but less accurate)
-# bash ./models/download-ggml-model.sh base
+# 3. Return to project
+cd ..
+
+# 4. Start the server
+./serverctl start
 ```
 
-**Model sizes:**
-| Model | Size | Accuracy | Use Case |
-|-------|------|----------|----------|
-| tiny | ~39MB | Basic | Testing |
-| **small** | ~465MB | High | ✅ Recommended |
-| medium | ~1.5GB | Higher | Best accuracy |
-| base | ~147MB | Medium | Fast but less accurate |
+## Models
 
-## Real-World Usage
+### Whisper (Transcription)
 
-### Scenario: Weekly Team Meeting (30-60 min)
+| Model | Size | Use |
+|-------|------|-----|
+| tiny | ~39MB | Testing |
+| **small** | ~465MB | Recommended |
+| medium | ~1.5GB | Best accuracy |
 
-```
-1. Before meeting
-   - Plug in your laptop
-   - Open Terminal: `source .venv/bin/activate`
-
-2. During meeting
-   - Just focus on listening and participating
-   - Optionally record the meeting video/audio
-
-3. After meeting
-   $ python src/app.py recording.wav
-   
-   Whisper Local:
-   ├→ Transcribes the audio
-   ├→ Extracts decisions & action items
-   └→ Saves to summaries/meeting_20241015_143022.md
-
-4. Share with team
-   - Upload the .md file to Slack/Notion/Google Docs
-```
-
-### Multilingual Meetings (English + Tagalog/Filipino)
-
-whisper.cpp supports **99 languages**. This project is optimized for Filipino meetings.
-
-**Current setting:** Transcription uses forced Tagalog (`-l tl`) for better accuracy.
-
-| Language | Transcription | Summary Output |
-|----------|---------------|----------------|
-| English | ✅ Works | English |
-| Tagalog/Filipino | ✅ Works well (forced) | English |
-| Mixed EN+TL | ✅ Works well (forced) | English |
-
-**For English-only recordings:**
+### Ollama (LLM)
 
 ```bash
-# Edit src/transcriber.py, change "-l tl" to "-l en"
-```
+# Default (good for summaries)
+ollama pull llama3.2:3b
 
-**For automatic detection (all languages):**
-
-```bash
-# Edit src/transcriber.py, change "-l tl" to "-l auto"
-```
-
-### Verify
-
-```bash
-# Test transcription
-./build/bin/whisper-cli -m ./models/ggml-base.bin -f ./samples/jfk.wav
-
-# Test Ollama
-curl -s http://localhost:11434/api/generate \
-  -d '{"model":"llama3.2:3b","prompt":"Say hi","stream":false}'
+# More capable
+ollama pull llama3.2:7b
 ```
 
 ## Troubleshooting
 
 | Issue | Fix |
 |-------|-----|
-| `Ollama not running` | `brew services start ollama` |
-| `whisper-cli not found` | Build: `cd whisper.cpp && make -j` |
-| `portaudio not found` | `brew install portaudio` |
+| Can't access localhost:8080 | `./serverctl start` |
+| Ollama not running | `./serverctl start` |
+| whisper-cli not found | Build in whisper.cpp: `make -j` |
+| portaudio not found | `brew install portaudio` |
 | Module errors | Ensure venv: `source .venv/bin/activate` |
 
 ## Tech Stack
 
-- [whisper.cpp](https://github.com/ggerganov/whisper.cpp) — Local speech-to-text (built on top of OpenAI Whisper)
+- [whisper.cpp](https://github.com/ggerganov/whisper.cpp) — Local speech-to-text
 - [Ollama](https://ollama.ai) — Local LLM runtime
 - PyAudio — Microphone input
-- Python 3.13+ — Core logic
+- Flask — Web interface
 
 ## License
 
 MIT — See [LICENSE](LICENSE)
 
 ## Acknowledgments
-
-This project would not exist without [whisper.cpp](https://github.com/ggerganov/whisper.cpp) by Georgi Gerganov — bringing OpenAI's Whisper model to run locally on consumer hardware.
-
-## Credits
 
 - [whisper.cpp](https://github.com/ggerganov/whisper.cpp) by Georgi Gerganov
 - [Ollama](https://ollama.ai) for local LLM inference
