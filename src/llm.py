@@ -28,7 +28,7 @@ def summarize(transcript: str, model: str = DEFAULT_MODEL) -> str:
         "stream": False
     }
 
-    response = requests.post(url, json=payload, timeout=120)
+    response = requests.post(url, json=payload, timeout=300)
     response.raise_for_status()
     
     data = response.json()
@@ -94,7 +94,7 @@ Updated summary:"""
         "stream": False
     }
 
-    response = requests.post(url, json=payload, timeout=120)
+    response = requests.post(url, json=payload, timeout=300)
     response.raise_for_status()
     
     data = response.json()
