@@ -19,9 +19,9 @@ PID_FILE="/tmp/whisper_webui.pid"
 OLLAMA_FLAG="/tmp/whisper_ollama_started.txt"
 LOG_FILE="/tmp/whisper_webui.log"
 
-# Check if Ollama is running as a system service (don't stop these)
+# Check if Ollama is installed as a system service
 is_ollama_system_service() {
-    if brew services list 2>/dev/null | grep -q "^ollama.*started"; then
+    if brew services list 2>/dev/null | grep -q "^ollama"; then
         return 0
     fi
     return 1
@@ -34,43 +34,40 @@ is_ollama_running() {
 
 start_ollama() {
     if is_ollama_running; then
-        echo -e "${BLUE}Ollama already running${NC}"
+        echo -e "${BLUE}Ollama (LLM Models) already running${NC}"
         return
     fi
     
+    echo -e "${YELLOW}Starting associated models (Ollama LLM)...${NC}"
     if is_ollama_system_service; then
-        echo -e "${YELLOW}Ollama is a system service (brew), starting...${NC}"
-        # Don't need to start manually if it's a brew service
-        return
+        brew services start ollama
+        sleep 2
+    else
+        ollama serve > /dev/null 2>&1 &
+        echo "started" > "$OLLAMA_FLAG"
+        sleep 2
     fi
-    
-    echo -e "${YELLOW}Starting Ollama...${NC}"
-    ollama serve > /dev/null 2>&1 &
-    sleep 2
     
     if is_ollama_running; then
-        echo "started" > "$OLLAMA_FLAG"
-        echo -e "${GREEN}Ollama started${NC}"
+        echo -e "${GREEN}Ollama (LLM Models) started${NC}"
     else
-        echo -e "${RED}Failed to start Ollama${NC}"
+        echo -e "${RED}Failed to start Ollama models${NC}"
         exit 1
     fi
 }
 
 stop_ollama() {
-    # Only stop if WE started it, not if it's a system service
-    if [ -f "$OLLAMA_FLAG" ]; then
-        echo -e "${YELLOW}Stopping Ollama (started by us)...${NC}"
-        pkill -f "ollama serve" 2>/dev/null || true
-        rm -f "$OLLAMA_FLAG"
-        echo -e "${GREEN}Ollama stopped${NC}"
-    elif is_ollama_system_service; then
-        echo -e "${BLUE}Ollama is system service - not stopping${NC}"
-    elif is_ollama_running; then
-        echo -e "${BLUE}Ollama was already running - not stopping${NC}"
-    else
-        echo -e "${BLUE}Ollama not running${NC}"
+    echo -e "${YELLOW}Stopping associated models (Ollama LLM)...${NC}"
+    if is_ollama_system_service; then
+        brew services stop ollama
+        sleep 2
     fi
+    
+    if is_ollama_running; then
+        pkill -f "ollama serve" 2>/dev/null || true
+    fi
+    rm -f "$OLLAMA_FLAG"
+    echo -e "${GREEN}Ollama (LLM Models) stopped${NC}"
 }
 
 start_webui() {
@@ -165,15 +162,13 @@ show_status() {
     # Check Ollama
     echo ""
     if is_ollama_running; then
-        if [ -f "$OLLAMA_FLAG" ]; then
-            echo -e "${GREEN}Ollama: Running${NC} (started by server)"
-        elif is_ollama_system_service; then
-            echo -e "${GREEN}Ollama: Running${NC} (system service)"
+        if is_ollama_system_service; then
+            echo -e "${GREEN}Ollama (LLM Models): Running${NC} (system service)"
         else
-            echo -e "${GREEN}Ollama: Running${NC} (already running)"
+            echo -e "${GREEN}Ollama (LLM Models): Running${NC} (process)"
         fi
     else
-        echo -e "${RED}Ollama: Not running${NC}"
+        echo -e "${RED}Ollama (LLM Models): Not running${NC}"
     fi
     
     # Show URLs if running
