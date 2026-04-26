@@ -48,371 +48,203 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-page: #0d1117;
+            --bg-panel: #161b22;
+            --bg-card: #21262d;
+            --text-primary: #e6edf3;
+            --text-muted: #8b949e;
+            --border: #30363d;
+            --accent-blue: #0096FF;
+            --danger: #f85149;
+            --success: #3fb950;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        html { background: #1a1a2e; }
-        body { 
+        html, body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            background-color: var(--bg-page);
+            background: linear-gradient(135deg, #0d1117 0%, #050608 100%);
             min-height: 100vh;
-            color: #e2e8f0;
-            padding: 20px;
+            color: var(--text-primary);
             line-height: 1.6;
         }
-        .container { max-width: 640px; margin: 0 auto; }
         
-        .header { text-align: center; padding: 30px 0 40px; }
-        .header h1 {
-            font-size: 2.5rem;
-            font-weight: 600;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 8px;
+        button { cursor: pointer; border: none; border-radius: 6px; font-weight: 500; font-size: 14px; padding: 8px 16px; transition: opacity 0.2s ease; font-family: inherit; }
+        button:hover:not(:disabled) { opacity: 0.85; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background-color: var(--accent-blue); color: #ffffff; }
+        .btn-secondary { background-color: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); }
+        .btn-success { background-color: var(--success); color: #ffffff; }
+        .btn-danger { background-color: var(--danger); color: #ffffff; }
+
+        .app-container { display: flex; flex-direction: column; min-height: 100vh; }
+        header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-panel); }
+        .banner { font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0; }
+        .banner span { color: var(--accent-blue); }
+        
+        .app-main { display: flex; flex-direction: column; gap: 24px; padding: 24px; max-width: 1200px; margin: 0 auto; width: 100%; flex: 1; }
+        @media (min-width: 768px) {
+            .app-main { flex-direction: row; }
+            .panel-left, .panel-right { flex: 1; min-width: 0; }
         }
-        .header p { opacity: 0.7; font-size: 0.95rem; }
         
-        .card {
-            background: rgba(255,255,255,0.08);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 20px;
-            padding: 28px;
-            margin-bottom: 20px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-            transition: all 0.3s;
-        }
-        .card:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,0.4); }
-        .card h3 { font-size: 1.1rem; font-weight: 500; margin-bottom: 16px; color: #fff; }
+        .panel { background-color: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; display: flex; flex-direction: column; }
+        .card { background-color: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 16px; position: relative; }
         
-        .file-input-wrapper { position: relative; margin: 16px 0; }
-        .file-input { display: none; }
+        .file-input-wrapper { margin-top: 16px; margin-bottom: 16px; }
         .file-label {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 40px;
-            border: 2px dashed rgba(255,255,255,0.25);
-            border-radius: 14px;
-            cursor: pointer;
-            transition: all 0.3s;
-            background: rgba(255,255,255,0.03);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 40px; border: 1px dashed var(--border); border-radius: 6px; cursor: pointer;
+            transition: all 0.3s; background-color: var(--bg-page); color: var(--text-muted);
         }
-        .file-label:hover { border-color: #667eea; background: rgba(102,126,234,0.1); }
-        .file-label svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.6; }
-        .file-label span { opacity: 0.7; font-size: 0.9rem; }
-        .file-selected {
-            display: none;
-            padding: 16px;
-            background: rgba(102,126,234,0.15);
-            border-radius: 10px;
-            margin-top: 12px;
-            text-align: center;
-            font-size: 0.9rem;
-            color: #667eea;
-        }
+        .file-label:hover { border-color: var(--accent-blue); }
+        .file-selected { padding: 12px; background: rgba(0,150,255,0.1); border-radius: 6px; margin-top: 12px; text-align: center; color: var(--accent-blue); display: none; }
         
-        .btn {
-            width: 100%;
-            padding: 14px 24px;
-            border: none;
-            border-radius: 12px;
-            font-size: 1rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-family: inherit;
-        }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        .btn-primary:hover:not(:disabled) { transform: scale(1.02); box-shadow: 0 8px 24px rgba(102,126,234,0.4); }
-        .btn-record {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
-        }
-        .btn-record:hover { transform: scale(1.02); box-shadow: 0 8px 24px rgba(245,87,108,0.4); }
-        .btn-download {
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-            color: #e2e8f0;
-            padding: 10px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.85rem;
-        }
-        .btn-download:hover { background: rgba(255,255,255,0.2); }
+        .processing { text-align: center; padding: 20px; }
+        .spinner { border: 3px solid rgba(255, 255, 255, 0.1); width: 32px; height: 32px; border-radius: 50%; border-left-color: var(--accent-blue); animation: spin 1s linear infinite; margin: 0 auto 16px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        input[type="number"] {
-            width: 100px;
-            padding: 12px 16px;
-            border-radius: 10px;
-            border: 1px solid rgba(255,255,255,0.15);
-            background: rgba(255,255,255,0.08);
-            color: #fff;
-            font-size: 1rem;
-        }
-        input[type="number"]:focus { outline: none; border-color: #667eea; }
-        
-        .processing { text-align: center; }
-        .spinner {
-            width: 56px;
-            height: 56px;
-            border: 4px solid rgba(255,255,255,0.1);
-            border-top-color: #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        
-        /* Clean Progress Bar */
         .progress-container { margin: 24px 0; }
-        .progress-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        .progress-phase {
-            font-size: 1.1rem;
-            font-weight: 500;
-            color: #fff;
-        }
-        .progress-percent {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #667eea;
-        }
-        .progress-bar {
-            width: 100%;
-            height: 12px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 6px;
-            overflow: hidden;
-        }
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            border-radius: 6px;
-            transition: width 0.5s ease;
-            width: 0%;
-        }
+        .progress-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
+        .progress-bar { width: 100%; height: 8px; background: var(--bg-page); border-radius: 4px; overflow: hidden; border: 1px solid var(--border); }
+        .progress-fill { height: 100%; background-color: var(--accent-blue); width: 0%; transition: width 0.3s ease; }
         
-        /* Steps Timeline */
-        .timeline {
-            background: #0d1117;
-            border-radius: 12px;
-            padding: 16px;
-            margin-top: 20px;
-            text-align: left;
-            font-size: 0.85rem;
-        }
-        .timeline-title {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            opacity: 0.5;
-            margin-bottom: 12px;
-        }
-        .timeline-item {
-            display: flex;
-            align-items: flex-start;
-            padding: 10px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-        .timeline-item:last-child { border-bottom: none; }
-        .timeline-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #667eea;
-            margin-right: 12px;
-            margin-top: 5px;
-            flex-shrink: 0;
-        }
-        .timeline-item.done .timeline-dot { background: #10b981; }
-        .timeline-item.current .timeline-dot { 
-            background: #667eea;
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(102,126,234,0.4); }
-            50% { box-shadow: 0 0 0 8px rgba(102,126,234,0); }
-        }
-        .timeline-content { flex: 1; }
-        .timeline-time { 
-            font-size: 0.7rem; 
-            opacity: 0.5; 
-            margin-bottom: 4px; 
-        }
-        .timeline-text { color: #e2e8f0; }
+        .timeline { background: var(--bg-page); border-radius: 6px; padding: 16px; margin-top: 20px; text-align: left; font-size: 13px; border: 1px solid var(--border); }
+        .timeline-title { opacity: 0.6; margin-bottom: 12px; text-transform: uppercase; font-size: 11px; }
+        .timeline-item { display: flex; margin-bottom: 8px; }
+        .timeline-item:last-child { margin-bottom: 0; }
+        .timeline-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); margin-right: 12px; margin-top: 5px; }
+        .timeline-item.done .timeline-dot { background: var(--success); }
+        .timeline-item.current .timeline-dot { background: var(--accent-blue); }
         
-        .result-section { margin-bottom: 20px; }
-        .result-section h4 {
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            opacity: 0.6;
-            margin-bottom: 12px;
-        }
-        .result-content {
-            background: rgba(0,0,0,0.3);
-            border-radius: 12px;
-            padding: 20px;
-            white-space: pre-wrap;
-            max-height: 300px;
-            overflow-y: auto;
-            font-size: 0.95rem;
-            line-height: 1.7;
-        }
-        .download-bar { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+        .result-content { background: var(--bg-page); border: 1px solid var(--border); border-radius: 6px; padding: 16px; white-space: pre-wrap; max-height: 250px; overflow-y: auto; font-size: 14px; margin-bottom: 16px; color: var(--text-primary); }
         
-        .footer { text-align: center; opacity: 0.5; font-size: 0.8rem; margin-top: 30px; padding-bottom: 20px; }
+        .note { font-size: 12px; color: var(--text-muted); margin-top: 12px; }
+        input[type="number"] { width: 80px; padding: 8px; background: var(--bg-page); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px; }
+        input[type="file"] { display: none; }
         
-        .note {
-            font-size: 0.75rem;
-            opacity: 0.5;
-            margin-top: 12px;
-            padding: 10px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 8px;
-        }
-        
-        .fade-out { animation: fadeOut 0.5s forwards; }
-        @keyframes fadeOut {
-            from { opacity: 1; }
-            to { opacity: 0; transform: translateY(-10px); }
-        }
-        
+        .footer { text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px; border-top: 1px solid var(--border); margin-top: auto; }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); }
+        ::-webkit-scrollbar-track { background: var(--bg-page); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Whisper Local</h1>
-            <p>Meeting Audio Analyzer</p>
-        </div>
+    <div class="app-container">
+        <header>
+            <h1 class="banner"><span>NuecAI</span> Whisper Local</h1>
+            <div></div>
+        </header>
         
-        <!-- Processing State -->
-        <div id="processing-card" class="card" style="display:none;">
-            <div class="processing">
-                <div class="spinner"></div>
-                
-                <div class="progress-container">
-                    <div class="progress-header">
-                        <span class="progress-phase" id="phase-name">Preparing...</span>
-                        <span class="progress-percent" id="progress-percent">0%</span>
+        <main class="app-main">
+            <div class="panel-left" style="display: flex; flex-direction: column; gap: 24px;">
+                <div class="panel" id="input-panel">
+                    <h2 style="margin: 0 0 16px 0; font-size: 18px;">Input Audio</h2>
+                    
+                    <div id="upload-card">
+                        <div class="file-input-wrapper">
+                            <label for="audioFile" class="file-label" id="fileLabel">
+                                <span style="margin-bottom: 8px;">Upload an audio file</span>
+                                <span class="btn-secondary" style="padding: 6px 12px; border-radius: 4px; font-size: 12px;">Choose File</span>
+                                <span style="font-size: 11px; opacity: 0.5; margin-top: 8px;">(WAV, MP3, M4A, AAC)</span>
+                            </label>
+                            <input type="file" id="audioFile" accept=".wav,.mp3,.m4a,.aac,.ogg">
+                            <div class="file-selected" id="fileSelected"></div>
+                        </div>
+                        <button class="btn-primary" style="width: 100%; margin-bottom: 16px;" id="uploadBtn" disabled>Upload and Process</button>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progress-fill"></div>
+                    
+                    <div style="border-top: 1px solid var(--border); margin: 16px 0;"></div>
+                    
+                    <div id="record-card">
+                        <p style="color: var(--text-muted); margin-bottom: 12px; font-size: 14px;">Or record directly from microphone</p>
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                            <label style="color: var(--text-muted); font-size: 14px;">Duration (sec):</label>
+                            <input type="number" id="duration" value="60" min="5" max="600">
+                        </div>
+                        <button class="btn-danger" style="width: 100%;" id="recordBtn">Start Recording</button>
+                        <p class="note">Note: Uses host computer's microphone</p>
                     </div>
                 </div>
-                
-                <div class="timeline" id="timeline">
-                    <div class="timeline-title">Progress</div>
+
+                <div class="panel" id="processing-card" style="display:none;">
+                    <div class="processing">
+                        <div class="spinner"></div>
+                        <div style="color: var(--accent-blue); font-weight: 500;" id="phase-name">Processing...</div>
+                        
+                        <div class="progress-container">
+                            <div class="progress-header">
+                                <span>Progress</span>
+                                <span id="progress-percent">0%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progress-fill"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="timeline" id="timeline">
+                            <div class="timeline-title">Status</div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
-        
-        <!-- Error State -->
-        <div id="error-card" class="card" style="display:none;">
-            <div style="text-align:center;padding:20px;">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#f85149" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-                <h3 style="color:#f85149;margin:16px 0;">Error</h3>
-                <p id="error-msg" style="opacity:0.8;margin-bottom:20px;"></p>
-                <button class="btn btn-primary" onclick="location.reload()">Try Again</button>
-            </div>
-        </div>
-        
-        <!-- Result State -->
-        <div id="result-card" class="card" style="display:none;">
-            <h3>Analysis Complete</h3>
-            
-            <div class="result-section">
-                <h4>Summary</h4>
-                <div id="summary-content" class="result-content"></div>
-                <div class="download-bar">
-                    <button class="btn-download" onclick="downloadFile('summary')">Download Summary</button>
+
+                <div class="panel" id="error-card" style="display:none; border-color: var(--danger);">
+                    <h3 style="color: var(--danger); margin-bottom: 12px;">Error</h3>
+                    <p id="error-msg" style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;"></p>
+                    <button class="btn-secondary" onclick="location.reload()">Try Again</button>
                 </div>
             </div>
             
-            <div class="result-section">
-                <h4>Transcript</h4>
-                <div id="transcript-content" class="result-content"></div>
-                <div class="download-bar">
-                    <button class="btn-download" onclick="downloadFile('transcript')">Download Transcript</button>
+            <div class="panel-right" style="display: flex; flex-direction: column;">
+                <div class="panel" style="flex: 1;">
+                    <h2 style="margin: 0 0 16px 0; font-size: 18px;">Analysis Results</h2>
+                    
+                    <div id="no-result" style="flex: 1; display:flex; align-items:center; justify-content:center; color: var(--text-muted); text-align:center; min-height: 200px;">
+                        No audio processed yet. Upload or record to see results.
+                    </div>
+                    
+                    <div id="result-card" style="display:none;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <h4 style="margin: 0; font-size: 14px; color: var(--text-muted);">Summary</h4>
+                                <button class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="downloadFile('summary')">Download</button>
+                            </div>
+                            <div id="summary-content" class="result-content"></div>
+                        </div>
+                        
+                        <div style="margin-top: 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <h4 style="margin: 0; font-size: 14px; color: var(--text-muted);">Transcript</h4>
+                                <button class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="downloadFile('transcript')">Download</button>
+                            </div>
+                            <div id="transcript-content" class="result-content"></div>
+                        </div>
+                        
+                        <div style="margin-top: 24px; text-align: center;">
+                            <button class="btn-primary" onclick="location.reload()">Process Another</button>
+                        </div>
+                    </div>
                 </div>
             </div>
-            
-            <button class="btn btn-primary" onclick="location.reload()">Analyze Another Meeting</button>
-        </div>
-        
-        <!-- Upload Form -->
-        <div id="upload-card" class="card">
-            <h3>Upload Audio File</h3>
-            <div class="file-input-wrapper">
-                <input type="file" id="audioFile" class="file-input" accept=".wav,.mp3,.m4a,.aac,.ogg">
-                <label for="audioFile" class="file-label" id="fileLabel">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <path d="M12 2a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                        <line x1="12" y1="19" x2="12" y2="23"/>
-                        <line x1="8" y1="23" x2="16" y2="23"/>
-                    </svg>
-                    <span>Click to select audio file<br>(WAV, MP3, M4A, AAC)</span>
-                </label>
-                <div class="file-selected" id="fileSelected"></div>
-            </div>
-            <button class="btn btn-primary" id="uploadBtn" disabled>Upload and Process</button>
-        </div>
-        
-        <!-- Recording Form -->
-        <div id="record-card" class="card">
-            <h3>Record Now</h3>
-            <p style="opacity:0.6;margin-bottom:16px;">Record meeting directly</p>
-            <div style="margin-bottom:16px;">
-                <label style="display:block;margin-bottom:8px;opacity:0.7;">Duration (seconds):</label>
-                <input type="number" id="duration" value="60" min="5" max="600">
-            </div>
-            <button class="btn btn-record" id="recordBtn">Start Recording</button>
-            <p class="note">Note: Recording uses the host computer's microphone</p>
-        </div>
+        </main>
         
         <div class="footer">
-            100% Local - Your data never leaves this device<br>
-            <span id="server-ip"></span>
+            <div>100% Local - Your data never leaves this device</div>
+            <div id="server-ip" style="margin-top: 4px;"></div>
         </div>
     </div>
-    
+
     <script>
         var currentSummary = '';
         var currentTranscript = '';
         var pollInterval = null;
-        var lastProgress = 0;
         
-        // Show server IP
         fetch('/ip').then(r=>r.json()).then(d=>{
             if(d.ip && d.ip !== '127.0.0.1'){
                 document.getElementById('server-ip').innerHTML = 'Access from other devices: http://' + d.ip + ':8080';
             }
         });
         
-        // File selection
         document.getElementById('audioFile').onchange = function() {
             var file = this.files[0];
             var selected = document.getElementById('fileSelected');
@@ -427,7 +259,6 @@ HTML_TEMPLATE = """
             }
         };
         
-        // Upload
         document.getElementById('uploadBtn').onclick = function() {
             var file = document.getElementById('audioFile').files[0];
             if(!file) return;
@@ -437,68 +268,48 @@ HTML_TEMPLATE = """
             var formData = new FormData();
             formData.append('audio', file);
             
-            fetch('/upload', {
-                method: 'POST',
-                body: formData
-            }).then(r=>r.json()).then(handleResponse);
+            fetch('/upload', { method: 'POST', body: formData }).then(r=>r.json()).then(handleResponse);
         };
         
-        // Record
         document.getElementById('recordBtn').onclick = function() {
             var duration = parseInt(document.getElementById('duration').value);
-            if (duration < 5) {
-                alert('Minimum recording duration is 5 seconds');
-                return;
-            }
-            if (duration > 600) {
-                alert('Maximum recording duration is 600 seconds (10 minutes)');
-                return;
-            }
+            if (duration < 5) { alert('Min duration is 5s'); return; }
+            if (duration > 600) { alert('Max duration is 600s'); return; }
             showProcessing();
             
             fetch('/record', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({duration: duration})
             }).then(r=>r.json()).then(handleResponse);
         };
         
         function handleResponse(d) {
-            if(d.status === 'started') {
-                startPolling();
-            } else {
-                alert(d.message || 'Error');
-                location.reload();
-            }
+            if(d.status === 'started') { startPolling(); } 
+            else { alert(d.message || 'Error'); location.reload(); }
         }
         
         function showProcessing() {
-            document.getElementById('processing-card').style.display = 'block';
-            document.getElementById('upload-card').style.display = 'none';
-            document.getElementById('record-card').style.display = 'none';
+            document.getElementById('input-panel').style.display = 'none';
+            document.getElementById('processing-card').style.display = 'flex';
+            document.getElementById('error-card').style.display = 'none';
+            document.getElementById('result-card').style.display = 'none';
+            document.getElementById('no-result').style.display = 'flex';
+            
             document.getElementById('progress-fill').style.width = '1%';
             document.getElementById('progress-percent').innerText = '1%';
             document.getElementById('phase-name').innerText = 'Starting...';
-            document.getElementById('timeline').innerHTML = '<div class="timeline-title">Progress</div>';
+            document.getElementById('timeline').innerHTML = '<div class="timeline-title">Status</div>';
         }
         
-        function startPolling() {
-            pollInterval = setInterval(pollStatus, 1200);
-        }
+        function startPolling() { pollInterval = setInterval(pollStatus, 1200); }
         
         function pollStatus() {
             fetch('/status').then(r=>r.json()).then(d=>{
-                if(d.status === 'processing') {
-                    updateProgress(d);
-                } else if(d.status === 'done') {
+                if(d.status === 'processing') { updateProgress(d); } 
+                else if(d.status === 'done') {
                     clearInterval(pollInterval);
-                    var card = document.getElementById('processing-card');
-                    card.classList.add('fade-out');
-                    setTimeout(function() {
-                        card.style.display = 'none';
-                        card.classList.remove('fade-out');
-                        showResult(d.summary, d.transcript);
-                    }, 500);
+                    document.getElementById('processing-card').style.display = 'none';
+                    showResult(d.summary, d.transcript);
                 } else if(d.status === 'error') {
                     clearInterval(pollInterval);
                     showError(d.message);
@@ -508,34 +319,26 @@ HTML_TEMPLATE = """
         
         function updateProgress(d) {
             var progress = d.progress || 0;
-            var message = d.message || 'Processing...';
             var phase = d.phase_name || 'Processing';
             
-            // Update progress bar
-            var fill = document.getElementById('progress-fill');
-            var percent = document.getElementById('progress-percent');
-            var phaseName = document.getElementById('phase-name');
+            document.getElementById('progress-fill').style.width = progress + '%';
+            document.getElementById('progress-percent').innerText = progress + '%';
+            document.getElementById('phase-name').innerText = phase;
             
-            fill.style.width = progress + '%';
-            percent.innerText = progress + '%';
-            phaseName.innerText = phase;
-            
-            // Update timeline only if new progress
             if(d.steps && d.steps.length > 0) {
                 var timeline = document.getElementById('timeline');
-                var html = '<div class="timeline-title">Progress</div>';
+                var html = '<div class="timeline-title">Status</div>';
                 
                 d.steps.forEach(function(step, idx) {
                     var isLast = idx === d.steps.length - 1;
                     var statusClass = isLast ? 'current' : (progress >= step.p ? 'done' : '');
                     html += '<div class="timeline-item ' + statusClass + '">';
                     html += '<div class="timeline-dot"></div>';
-                    html += '<div class="timeline-content">';
-                    html += '<div class="timeline-time">' + step.t + '</div>';
-                    html += '<div class="timeline-text">' + step.m + '</div>';
+                    html += '<div style="flex:1;">';
+                    html += '<div style="font-size:11px;opacity:0.5;">' + step.t + '</div>';
+                    html += '<div>' + step.m + '</div>';
                     html += '</div></div>';
                 });
-                
                 timeline.innerHTML = html;
             }
         }
@@ -544,19 +347,16 @@ HTML_TEMPLATE = """
             currentSummary = summary;
             currentTranscript = transcript;
             
+            document.getElementById('no-result').style.display = 'none';
             document.getElementById('result-card').style.display = 'block';
-            document.getElementById('upload-card').style.display = 'none';
-            document.getElementById('record-card').style.display = 'none';
             
             document.getElementById('summary-content').innerText = summary || 'No summary available';
             document.getElementById('transcript-content').innerText = transcript || 'No transcript available';
         }
         
         function showError(msg) {
-            document.getElementById('error-card').style.display = 'block';
             document.getElementById('processing-card').style.display = 'none';
-            document.getElementById('upload-card').style.display = 'none';
-            document.getElementById('record-card').style.display = 'none';
+            document.getElementById('error-card').style.display = 'flex';
             document.getElementById('error-msg').innerText = msg;
         }
         
