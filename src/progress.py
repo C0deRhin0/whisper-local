@@ -19,6 +19,9 @@ _state = {
     'message': '',
     'initial_message': '',
     'steps': [],
+    # Track separate counters for each phase type
+    'transcribe_done': 0,
+    'analyze_done': 0,
 }
 
 PHASE_NAMES = {
@@ -46,7 +49,7 @@ OPERATION_DISPLAY = {
     'record': 'Recording audio...',
 }
 
-def reset():
+def reset_progress():
     """Reset progress state"""
     with _state['lock']:
         _state['active'] = False
@@ -58,6 +61,8 @@ def reset():
         _state['message'] = ''
         _state['initial_message'] = ''
         _state['steps'] = []
+        _state['transcribe_done'] = 0
+        _state['analyze_done'] = 0
 
 def start(total_chunks: int = 1, operation: str = 'upload'):
     """Start processing"""
@@ -90,10 +95,7 @@ def set_phase(phase: int, total: int = 0):
         start_pct, end_pct = phase_range
         
         # If single chunk or just starting, use phase start
-        if total > 1:
-            _state['progress'] = start_pct
-        else:
-            _state['progress'] = start_pct
+        _state['progress'] = start_pct
         
         # Calculate message
         if phase == 1:
@@ -101,41 +103,44 @@ def set_phase(phase: int, total: int = 0):
         else:
             _state['message'] = PHASE_NAMES[phase]
         
-        # Log step
-        msg = _state['message']
-        if total > 1 and phase in [3, 4]:
-            msg = f"{_state['message']} (1/{total})"
-        
+        # Log step only if phase changed or first time
         _state['steps'].append({
             'p': _state['progress'],
-            'm': msg,
-            't': time.strftime("%H:%M:%S")
+            'm': _state['message'],
+            't': time.strftime("%H:%M:%S"),
+            'phase': phase
         })
 
 def update_chunk():
-    """Mark one chunk as done - accurate progress update"""
+    """Mark one chunk as done - separate tracking for transcribe vs analyze"""
     with _state['lock']:
-        _state['phase_done'] += 1
-        current = _state['phase_done']
+        phase = _state['phase_num']
         total = _state.get('total_chunks', 1)
         
-        phase = _state['phase_num']
-        phase_range = PHASE_PROGRESS.get(phase, (15, 55))
-        start_pct, end_pct = phase_range
+        if phase == 3:
+            _state['transcribe_done'] += 1
+            current = _state['transcribe_done']
+            start_pct, end_pct = PHASE_PROGRESS[3]
+        elif phase == 4:
+            _state['analyze_done'] += 1
+            current = _state['analyze_done']
+            start_pct, end_pct = PHASE_PROGRESS[4]
+        else:
+            _state['phase_done'] += 1
+            current = _state['phase_done']
+            start_pct, end_pct = PHASE_PROGRESS.get(phase, (15, 55))
         
-        # Accurate progress: interpolate across chunks
         if total > 1:
             per_chunk = (end_pct - start_pct) / total
             _state['progress'] = start_pct + int(current * per_chunk)
         else:
             _state['progress'] = end_pct
         
-        # Update message with chunk count
         _state['message'] = PHASE_NAMES.get(phase, 'Processing...')
         if total > 1:
-            _state['message'] = f"{_state['message']} ({current}/{total})"
+            display_current = min(current, total)
+            _state['message'] = f"{_state['message']} ({display_current}/{total})"
         
-        # Log step
         _state['steps'].append({
             'p': _state['progress'],
             'm': _state['message'],
@@ -151,6 +156,15 @@ def complete():
         _state['active'] = False
         _state['steps'].append({'p': 100, 'm': 'Complete!', 't': time.strftime("%H:%M:%S")})
 
+def log_message(msg: str):
+    """Add a reactive log message to the UI timeline"""
+    with _state['lock']:
+        _state['steps'].append({
+            'p': _state['progress'],
+            'm': msg,
+            't': time.strftime("%H:%M:%S")
+        })
+
 def get():
     """Get current progress"""
     with _state['lock']:
@@ -160,7 +174,7 @@ def get():
             'phase': _state['phase_num'],
             'phase_name': PHASE_NAMES.get(_state['phase_num'], 'Ready'),
             'message': _state['message'],
-            'current_chunk': _state['phase_done'],
+            'current_chunk': _state['transcribe_done'],
             'total_chunks': _state['total_chunks'],
             'steps': list(_state['steps'])
         }
