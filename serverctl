@@ -19,6 +19,32 @@ PID_FILE="/tmp/whisper_webui.pid"
 OLLAMA_FLAG="/tmp/whisper_ollama_started.txt"
 LOG_FILE="/tmp/whisper_webui.log"
 
+# Check if whisper-cli exists
+is_whisper_built() {
+    [ -f "$PROJECT_DIR/whisper.cpp/build/bin/whisper-cli" ]
+}
+
+# Build whisper.cpp if not built
+build_whisper() {
+    if is_whisper_built; then
+        echo -e "${BLUE}whisper.cpp already built${NC}"
+        return
+    fi
+    
+    echo -e "${YELLOW}Building whisper.cpp (first time setup)...${NC}"
+    cd "$PROJECT_DIR/whisper.cpp"
+    
+    # Build with make
+    if make -j 2>&1; then
+        echo -e "${GREEN}whisper.cpp built successfully${NC}"
+    else
+        echo -e "${RED}Failed to build whisper.cpp${NC}"
+        exit 1
+    fi
+    
+    cd "$PROJECT_DIR"
+}
+
 # Check if Ollama is installed as a system service
 is_ollama_system_service() {
     if brew services list 2>/dev/null | grep -q "^ollama"; then
@@ -81,11 +107,14 @@ start_webui() {
         rm -f "$PID_FILE"
     fi
     
+    # Build whisper.cpp if needed
+    build_whisper
+    
     echo -e "${YELLOW}Starting Whisper Local Web UI...${NC}"
     
     # Start server
     source "$PROJECT_DIR/.venv/bin/activate"
-    nohup python "$PROJECT_DIR/src/webui.py" > "$LOG_FILE" 2>&1 &
+    nohup python3 "$PROJECT_DIR/src/webui.py" > "$LOG_FILE" 2>&1 &
     WEBUI_PID=$!
     
     echo $WEBUI_PID > "$PID_FILE"
@@ -123,7 +152,7 @@ stop_webui() {
         rm -f "$PID_FILE"
     else
         # Find by process name
-        PID=$(pgrep -f "python.*webui.py" | head -1)
+        PID=$(pgrep -f "python3.*webui.py" | head -1)
         if [ -n "$PID" ]; then
             echo -e "${YELLOW}Stopping Web UI...${NC}"
             kill "$PID" 2>/dev/null || true
@@ -150,7 +179,7 @@ show_status() {
             echo -e "${RED}Web UI: Not running${NC} (stale PID file)"
         fi
     else
-        PID=$(pgrep -f "python.*webui.py" | head -1)
+        PID=$(pgrep -f "python3.*webui.py" | head -1)
         if [ -n "$PID" ]; then
             echo -e "${GREEN}Web UI: Running${NC} (PID: $PID)"
             RUNNING_WEBUI=true
