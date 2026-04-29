@@ -1,36 +1,32 @@
-from src.recorder import record_audio
-from src.transcriber import transcribe
-from src.llm import summarize, summarize_with_context
-from src.audio_utils import split_audio, cleanup_chunks, get_audio_duration, CHUNK_DURATION_SECONDS, _ensure_wav
-from src.storage import save_summary
-from src.progress import start, set_phase, update_chunk, complete, get, reset, is_active
-import tempfile
 import os
+import tempfile
 import shutil
-import sys
+import pathlib
+import concurrent.futures
+import json
 
-def _log(msg):
-    """Print with immediate flush."""
-    print(msg, flush=True)
-    sys.stdout.flush()
+# Internal imports
+from audio_utils import split_audio, save_summary
+from transcriber import transcribe, _get_file_hash
+from llm import summarize
+from progress import set_phase, update_chunk, complete, reset_progress, log_message
 
-def run_pipeline(audio_path: str = None, duration: int = 30, chunk_duration: int = CHUNK_DURATION_SECONDS) -> dict:
-    """
-    Run the full meeting transcription pipeline with accurate progress tracking.
-    """
-    # Check if already in progress (don't reset if webui started it)
-    if is_active():
-        # Continue from current state - just process the audio
-        return _process_audio(audio_path, chunk_duration)
-    
-    # Not in progress - start fresh (CLI mode)
-    reset()
+# Settings
+CHUNK_DURATION_SECONDS = 180 
+BASE_DIR = pathlib.Path(__file__).parent.parent
+
+def _log(msg: str):
+    print(f"[Pipeline] {msg}")
+
+def run_pipeline(audio_path: str = None, duration: int = 60, chunk_duration: int = CHUNK_DURATION_SECONDS) -> dict:
+    """Run the transcription and analysis pipeline."""
     temp_file = False
     
     try:
         if not audio_path:
             audio_path = os.path.join(tempfile.gettempdir(), "temp_recording.wav")
-            start(1, 'record')
+            from recorder import record_audio
+            start_record = True
             _log(f"Recording audio for {duration} seconds...")
             record_audio(audio_path, duration=duration)
             temp_file = True
@@ -43,7 +39,20 @@ def run_pipeline(audio_path: str = None, duration: int = 30, chunk_duration: int
 
 
 def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS) -> dict:
-    """Process audio file with accurate progress tracking."""
+    """Process audio file with accurate progress and full-file caching."""
+    # 1. Check Full File Cache
+    file_hash = _get_file_hash(audio_path)
+    cache_dir = BASE_DIR / "data" / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"full_{file_hash}.json"
+    
+    if cache_path.exists():
+        _log("CACHE HIT: Loading existing results for this file.")
+        with open(cache_path, 'r') as f:
+            cached_data = json.load(f)
+            complete() # Mark 100% in UI
+            return cached_data
+
     chunk_dir = tempfile.mkdtemp(prefix="whisper_chunks_")
     
     try:
@@ -53,81 +62,61 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
         chunk_paths = split_audio(audio_path, chunk_dir, chunk_duration)
         
         total_chunks = len(chunk_paths)
-        
-        # Update chunks (only if not already tracking)
-        if total_chunks > 1:
-            set_phase(3, total_chunks)
-        
-        if total_chunks <= 1:
-            # Single chunk - simple path
-            set_phase(3, 1)
-            _log("Transcribing audio...")
-            transcript = transcribe(chunk_paths[0])
-            
-            if not transcript.strip():
-                raise ValueError("Transcript is empty.")
-            
-            set_phase(4, 1)
-            _log("Summarizing transcript...")
-            summary = summarize(transcript)
-            
-            set_phase(5)
-            _log("Saving results...")
-            output_file = save_summary(transcript, summary, "summaries")
-            
-            complete()
-            
-            return {
-                "transcript": transcript,
-                "summary": summary,
-                "output_file": output_file
-            }
-        
-        # Multiple chunks - process on-the-fly
         set_phase(3, total_chunks)
-        _log(f"Processing {total_chunks} chunks...")
         
-        cumulative_summary = ""
-        full_transcript = ""
+        # Phase 3: Parallel Transcription
+        transcripts_dict = {}
+        initial_context = "Meeting regarding AI analytics, Firebase, SQL, Cloud Functions, and Digital Ocean in English, Tagalog, and Bicolano dialect."
+
+        def transcribe_task(idx, path, prompt):
+            # Log starting state to UI immediately
+            log_message(f"Transcribing Chunk {idx+1}...")
+            text = transcribe(path, prompt=prompt)
+            return idx, text
+
+        _log(f"Starting parallel transcription with 2 workers...")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            # Submit all tasks
+            futures = [executor.submit(transcribe_task, i, path, initial_context) 
+                       for i, path in enumerate(chunk_paths)]
+            
+            for future in concurrent.futures.as_completed(futures):
+                idx, text = future.result()
+                transcripts_dict[idx] = text
+                log_message(f"Chunk {idx+1} complete.")
+                update_chunk() # Progress in Phase 3
         
-        for i, chunk_path in enumerate(chunk_paths):
-            chunk_num = i + 1
-            
-            # Transcribe this chunk
-            _log(f"[{chunk_num}/{total_chunks}] Transcribing...")
-            transcript = transcribe(chunk_path)
-            
-            if not transcript.strip():
-                _log(f"[{chunk_num}] Empty, skipping...")
-                update_chunk()
-                continue
-            
-            full_transcript += transcript + " "
-            update_chunk()
-            
-            # Summarize with context
-            set_phase(4, total_chunks)
-            _log(f"[{chunk_num}] Analyzing...")
-            cumulative_summary = summarize_with_context(
-                new_transcript=transcript,
-                prior_summary=cumulative_summary
-            )
-            update_chunk()
+        # Reconstruct transcript in order
+        transcripts = [transcripts_dict[i] for i in range(len(chunk_paths)) if transcripts_dict.get(i)]
+        full_transcript = " ".join(transcripts)
         
         if not full_transcript.strip():
-            raise ValueError("No valid transcripts from any chunk.")
-        
+            raise ValueError("No speech detected in the audio.")
+
+        # Phase 4: Batch Summary
+        set_phase(4, 1)
+        _log("Generating batch summary...")
+        summary = summarize(full_transcript)
+        update_chunk()
+
+        # Phase 5: Save & Cache Result
         set_phase(5)
         _log("Saving results...")
-        output_file = save_summary(full_transcript, cumulative_summary, "summaries")
+        output_file = save_summary(full_transcript, summary, "summaries")
         
-        complete()
-        
-        return {
+        result = {
             "transcript": full_transcript,
-            "summary": cumulative_summary,
+            "summary": summary,
             "output_file": output_file
         }
+        
+        # Save to cache for next time
+        with open(cache_path, 'w') as f:
+            json.dump(result, f)
+            
+        complete()
+        return result
+
     finally:
         if os.path.exists(chunk_dir):
             shutil.rmtree(chunk_dir)
