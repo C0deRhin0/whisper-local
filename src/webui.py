@@ -17,10 +17,12 @@ import time
 from pathlib import Path
 from flask import Flask, render_template_string, request, jsonify
 
-# Fix path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Fix path to allow local imports
+src_dir = os.path.dirname(os.path.abspath(__file__))
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
-from src.progress import get as get_progress, start, complete, reset as reset_progress
+from progress import get as get_progress, start, complete, reset_progress
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'whisper-local-secret'
@@ -46,6 +48,7 @@ HTML_TEMPLATE = """
 <head>
     <title>Whisper Local - Meeting Analyzer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0d1117">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -60,10 +63,11 @@ HTML_TEMPLATE = """
             --success: #3fb950;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { 
+        html { background-color: #0d1117 !important; }
+        body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background-color: var(--bg-page);
-            background: linear-gradient(135deg, #0d1117 0%, #050608 100%);
+            background-color: #0d1117;
+            background: linear-gradient(135deg, #0d1117 0%, #050608 100%) fixed;
             min-height: 100vh;
             color: var(--text-primary);
             line-height: 1.6;
@@ -219,9 +223,6 @@ HTML_TEMPLATE = """
                             </div>
                             <div id="transcript-content" class="result-content"></div>
                         </div>
-                        
-                        <div style="margin-top: 24px; text-align: center;">
-                            <button class="btn-primary" onclick="location.reload()">Process Another</button>
                         </div>
                     </div>
                 </div>
@@ -352,6 +353,13 @@ HTML_TEMPLATE = """
             
             document.getElementById('summary-content').innerText = summary || 'No summary available';
             document.getElementById('transcript-content').innerText = transcript || 'No transcript available';
+
+            // Show input panel again for new upload
+            document.getElementById('input-panel').style.display = 'block';
+            document.getElementById('audioFile').value = '';
+            document.getElementById('fileSelected').style.display = 'none';
+            document.getElementById('fileLabel').style.display = 'flex';
+            document.getElementById('uploadBtn').disabled = true;
         }
         
         function showError(msg) {
@@ -362,11 +370,12 @@ HTML_TEMPLATE = """
         
         function downloadFile(type) {
             var content = type === 'summary' ? currentSummary : currentTranscript;
+            var extension = type === 'summary' ? '.md' : '.txt';
             var blob = new Blob([content], {type: 'text/plain'});
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
             a.href = url;
-            a.download = type + '_' + Date.now() + '.txt';
+            a.download = type + '_' + Date.now() + extension;
             a.click();
             URL.revokeObjectURL(url);
         }
@@ -460,7 +469,7 @@ def upload():
         start(1, 'upload')
         
         def process():
-            from src.pipeline import run_pipeline
+            from pipeline import run_pipeline
             global stop_flag
             
             try:
@@ -505,8 +514,8 @@ def record():
         start(1, 'record')
         
         def record_and_process():
-            from src.recorder import record_audio
-            from src.pipeline import run_pipeline
+            from recorder import record_audio
+            from pipeline import run_pipeline
             global stop_flag
             
             try:
