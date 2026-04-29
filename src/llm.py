@@ -1,92 +1,48 @@
 import requests
 import json
 
-OLLAMA_URL = "http://localhost:11434"
-DEFAULT_MODEL = "llama3.2:3b"
-
-def _check_ollama() -> bool:
-    """Check if Ollama is running."""
-    try:
-        response = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
-        return response.status_code == 200
-    except requests.exceptions.RequestException:
-        return False
-
-def summarize(transcript: str, model: str = DEFAULT_MODEL) -> str:
-    """Summarize a transcript (single-pass, for short audio)."""
-    if not _check_ollama():
-        raise ConnectionError(
-            "Ollama is not running. Start it with: ollama serve"
-        )
+def summarize(new_transcript: str, prior_summary: str = "", model: str = "llama3.2:3b") -> str:
+    """Send transcript to local Ollama LLM for structured analysis."""
+    url = "http://localhost:11434/api/generate"
     
-    url = f"{OLLAMA_URL}/api/generate"
-    prompt = _build_extraction_prompt(transcript)
+    prompt = f"""You are an executive assistant summarizing a meeting transcript for senior leadership.
+The audio is a mix of English, Tagalog, and Bicolano dialect. 
+Your goal is to produce a concise, structured English summary. 
 
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "stream": False
-    }
+CRITICAL INSTRUCTIONS:
+1. DO NOT identify or name specific individuals (e.g., do not say 'Sergiya', 'Jannick', 'Paul'). 
+2. If names are mentioned in the transcript, ignore them or refer to them by their functional role if clear (e.g., 'The developer', 'The lead').
+3. Focus strictly on WHAT happened and WHAT was decided.
+4. Output the final summary ONLY in professional English. Translate dialect (Bikol/Tagalog) terms into professional English.
+5. If the transcript is extremely short (e.g., just testing, greetings, or less than 3 sentences), do NOT use the template. Instead, provide a single-sentence summary titled "Status" (e.g., "Status: Short audio test/greeting detected.").
+6. Ignore filler, repetitions, and language-specific translations.
 
-    response = requests.post(url, json=payload, timeout=300)
-    response.raise_for_status()
-    
-    data = response.json()
-    return data.get("response", "")
+FORMAT FOR STANDARD MEETINGS:
+1. Meeting Overview (2–3 sentences)
+- Purpose and overall outcome of the discussion.
 
+2. Key Decisions
+- List clear decisions made during the meeting.
 
-def summarize_with_context(new_transcript: str, prior_summary: str = "", model: str = DEFAULT_MODEL) -> str:
-    """
-    Summarize incrementally, building on prior context.
-    
-    Used for chunked transcription - each chunk builds on previous summary.
-    
-    Args:
-        new_transcript: Transcript from the current audio chunk
-        prior_summary: Summary from all previous chunks (or "" for first)
-        model: Ollama model to use
-    
-    Returns:
-        Updated unified summary
-    """
-    if not _check_ollama():
-        raise ConnectionError(
-            "Ollama is not running. Start it with: ollama serve"
-        )
-    
-    url = f"{OLLAMA_URL}/api/generate"
-    
-    if prior_summary:
-        prompt = f"""You are an executive meeting analyst analyzing a meeting in segments.
+3. Key Discussion Points
+- Summarize important topics and technical points debated.
 
-The meeting is being analyzed progressively. Here's the summary so far:
----
-{prior_summary}
----
+4. Action Items
+- List specific tasks to be completed (Format: - [Task Description]). Do not assign names.
 
-Now analyze this new segment of the meeting:
+5. Risks / Issues
+- Problems, blockers, or concerns raised.
 
-Transcript segment:
+6. Follow-ups / Next Steps
+- What needs to happen next.
+
+{"PREVIOUS SUMMARY TO UPDATE:" if prior_summary else ""}
+{prior_summary if prior_summary else ""}
+
+NEW TRANSCRIPT SEGMENT TO PROCESS:
 {new_transcript}
 
-IMPORTANT: Respond in ENGLISH even if the meeting was in Tagalog or mixed English/Tagalog.
-
-Update the summary to incorporate this new segment. Keep the same structure:
-- Executive Summary (3 sentences in English)
-- Key Decisions (with names, in English)
-- Action Items (with owners and deadlines, in English)
-- Open Questions
-
-Rules:
-- Do NOT invent names
-- Do NOT repeat information already in the summary
-- Focus on NEW information from this segment
-- Respond in English
-
-Updated summary:"""
-    else:
-        # First chunk - use standard extraction
-        prompt = _build_extraction_prompt(new_transcript)
+Updated Senior Leadership Summary:"""
 
     payload = {
         "model": model,
@@ -94,38 +50,9 @@ Updated summary:"""
         "stream": False
     }
 
-    response = requests.post(url, json=payload, timeout=300)
-    response.raise_for_status()
-    
-    data = response.json()
-    return data.get("response", "")
-
-
-def _build_extraction_prompt(transcript: str) -> str:
-    """Build the standard extraction prompt."""
-    return f"""You are an executive meeting analyst.
-
-Analyze the meeting transcript and extract the key information.
-
-IMPORTANT: The meeting may be in English, Tagalog, or mixed. Respond in ENGLISH regardless of the input language.
-
-Extract:
-
-1. Executive Summary (exactly 3 sentences in English)
-2. Key Decisions
-   - Decision (in English)
-   - Decision-maker (name)
-3. Action Items
-   - Task (in English)
-   - Owner (must be named)
-   - Deadline (infer if needed)
-4. Open Questions
-
-Rules:
-- Do NOT invent names
-- Do NOT use vague terms like "team"
-- Respond in English even if input is Tagalog/mixed
-- Be concise and structured
-
-Transcript:
-{transcript}"""
+    try:
+        response = requests.post(url, json=payload, timeout=300)
+        response.raise_for_status()
+        return response.json().get("response", "")
+    except Exception as e:
+        return f"Error during summarization: {str(e)}"
