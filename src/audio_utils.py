@@ -16,7 +16,7 @@ from pathlib import Path
 
 # Default settings
 CHUNK_DURATION_SECONDS = 180  # 3 minutes - good for mixed language
-CHUNK_OVERLAP_SECONDS = 15   # 15 seconds overlap
+CHUNK_OVERLAP_SECONDS = 0    # 0 seconds overlap - we use prompting instead to avoid duplication
 SILENCE_THRESHOLD_DB = -40    # Silence threshold in dB
 MIN_SILENCE_DURATION = 0.5    # Min silence (sec) to be considered a breakpoint
 MAX_CHUNK_DURATION = 600     # Max chunk (10 min) for safety
@@ -164,13 +164,15 @@ def split_audio_smart(
             if next_silence:
                 # Round to nearest 0.1 sec for cleaner boundaries
                 boundary = round(next_silence / frame_rate, 1)
-                if boundary not in boundaries:
+                if boundary not in boundaries and boundary < total_duration:
                     boundaries.append(boundary)
                 current_pos = next_silence + overlap_frames
             else:
                 # No silence point found, use fixed interval
                 current_pos += target_chunk_frames
-                boundaries.append(round(current_pos / frame_rate, 1))
+                boundary = round(current_pos / frame_rate, 1)
+                if boundary < total_duration:
+                    boundaries.append(boundary)
     
     else:
         # No silence detected, use fixed intervals with overlap
@@ -180,7 +182,9 @@ def split_audio_smart(
         
         pos = 0
         while pos < total_frames:
-            boundaries.append(round(pos / frame_rate, 1))
+            boundary = round(pos / frame_rate, 1)
+            if boundary < total_duration:
+                boundaries.append(boundary)
             pos += stride
     
     # Add end point
@@ -259,3 +263,25 @@ def cleanup_chunks(chunk_paths: list[str]) -> None:
             os.remove(path)
         except OSError:
             pass
+
+def save_summary(transcript: str, summary: str, output_dir: str = "summaries") -> str:
+    """Save transcript and summary to a markdown file."""
+    import time
+    from pathlib import Path
+    
+    # Ensure directory exists
+    out_path = Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    
+    # Generate filename
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    filename = f"meeting_notes_{timestamp}.md"
+    file_path = out_path / filename
+    
+    # Format content
+    content = f"# Meeting Notes - {time.strftime('%B %d, %Y')}\n\n{summary}\n\n---\n# Full Transcript\n{transcript}"
+    
+    with open(file_path, "w", encoding='utf-8') as f:
+        f.write(content)
+        
+    return str(file_path)
