@@ -23,7 +23,9 @@ A local transcription + LLM system for analyzing meeting recordings. 100% offlin
 - macOS (Apple Silicon highly recommended for Metal acceleration)
 - [Homebrew](https://brew.sh)
 - **ffmpeg**: `brew install ffmpeg`
+- **Ollama**: `brew install ollama` (with `llama3.2:3b` pulled)
 - **portaudio**: `brew install portaudio` (for microphone support)
+
 
 ## Quick Start
 
