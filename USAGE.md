@@ -2,88 +2,67 @@
 
 ## Prerequisites
 
-1. **Ollama running**
-
+1. **Ollama setup**
 ```bash
-brew services start ollama
 ollama pull llama3.2:3b
 ```
 
-2. **Python venv activated**
-
+2. **Environment**
 ```bash
-cd /path/to/whisper-local
 source .venv/bin/activate
 ```
 
-## Basic Usage
+## Modes of Operation
 
-### Process a pre-recorded audio file
+### 1. Web UI (Recommended)
+The Web UI is the primary way to use Whisper Local. It provides real-time feedback and a two-column layout for immediate analysis.
+- **Start**: `./serverctl start`
+- **Features**: 
+    - Parallel transcription for 2x speed.
+    - Automatic SHA-256 caching (instant re-analysis).
+    - Auto-reset input panel after completion.
+    - Professional Markdown (.md) summary downloads.
 
+### 2. CLI Mode
+For quick terminal-based processing:
 ```bash
-python src/app.py path/to/meeting.wav
-```
+# Process a file
+python src/app.py path/to/meeting.m4a
 
-### Record from microphone
-
-```bash
+# Record from microphone (default 60s)
 python src/app.py
+
+# Record with custom duration
+python src/app.py --duration 120
 ```
 
-### Record with custom duration
+## High-Performance Pipeline
 
-```bash
-python src/app.py --duration 60
-```
+The system automatically optimizes for long audio files:
+- **Parallelism**: Uses 2 concurrent workers for transcription on Apple Silicon.
+- **Smart Chunking**: Splits audio into 3-minute segments at natural silence points.
+- **Full-File Caching**: Analysis results are stored in `data/cache/`. If the same file is uploaded again, results appear instantly without re-processing.
 
-## Long Audio Files (60+ minutes)
+## Output Formats
 
-The pipeline automatically detects long files (>5 min) and uses **chunked processing**:
+### Manual Downloads (Web UI)
+- **Executive Summary**: Downloaded as `.md` (Markdown) for easy integration into Notion, Obsidian, or Slack.
+- **Transcript**: Downloaded as `.txt` for raw reference.
 
-- Audio is split into 5-minute segments
-- Each chunk is transcribed sequentially
-- LLM synthesizes incrementally — each iteration builds on prior context
-- Final output = unified summary as if processed as a whole
+### Automated Files
+Each run automatically saves a timestamped record to the `summaries/` directory:
+- `meeting_notes_YYYYMMDD_HHMMSS.md`
 
-### Custom chunk duration
-
-```python
-from src.pipeline import run_pipeline
-run_pipeline(audio_path="long_meeting.wav", chunk_duration=600)  # 10 min chunks
-```
-
-## Output
-
-Each run creates `summaries/meeting_YYYYMMDD_HHMMSS.md`:
-
-```markdown
-## Executive Summary
-[Summary]
-
-## Raw Transcript
-[Full transcript]
-```
-
-## Python API
-
-```python
-from src.pipeline import run_pipeline
-
-# From file
-result = run_pipeline("meeting.wav")
-print(result["summary"])
-
-# From microphone
-result = run_pipeline(duration=60)
-
-# Long file with custom chunks
-result = run_pipeline("long.wav", chunk_duration=600)
-```
+## Prompting & Accuracy
+- **Dialect Handling**: Automatically translates Tagalog and Bikol terms into professional English.
+- **No-Naming Policy**: The LLM focuses on technical roles and decisions rather than individual names to eliminate hallucinations.
+- **Minimal Fallback**: For recordings under 3 sentences, the system provides a simple "Status" update instead of a full template.
 
 ## Troubleshooting
 
 | Error | Fix |
 |-------|-----|
-| `Ollama not running` | `brew services start ollama` |
-| `whisper-cli not found` | Build: `cd whisper.cpp && make -j` |
-| `ModuleNotFoundError` | `source .venv/bin/activate` |
+| `ModuleNotFoundError` | Run `source .venv/bin/activate` or check for direct imports. |
+| `pyaudio` errors | Ensure `brew install portaudio` is completed before `pip install`. |
+| `whisper-cli` missing | Run `./serverctl build` to compile the engine for Metal. |
+| LLM Hallucinations | Ensure you are using the `llama3.2:3b` model for best results. |
