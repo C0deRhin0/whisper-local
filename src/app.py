@@ -5,7 +5,7 @@ import os
 # Add parent dir to PYTHONPATH so `from src.X import Y` works
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.pipeline import run_pipeline
+from pipeline import run_pipeline
 
 def main():
     parser = argparse.ArgumentParser(description="Meeting Transcription Pipeline")
