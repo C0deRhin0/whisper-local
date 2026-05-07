@@ -1,3 +1,5 @@
 pyaudio
 requests
 flask
+markdown
+weasyprint
