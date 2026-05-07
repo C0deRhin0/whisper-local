@@ -26,26 +26,29 @@ Use `serverctl` to manage the entire service:
 ## Usage
 
 ### Option 1: Upload Audio File
+
 1. Open browser (http://localhost:8080)
 2. Click the file picker box
 3. Select your meeting audio (WAV, MP3, M4A, AAC)
 4. Click "Upload and Process"
 5. Watch progress bar and timeline update in real-time
-6. View summary and transcript
-7. Download as text files
+6. View meeting record and transcript
+7. Download as Markdown or PDF
 
 ### Option 2: Record Directly
+
 1. Open browser (http://localhost:8080)
 2. Enter duration in seconds
 3. Click "Start Recording"
 4. Speak into the host computer's microphone
 5. Watch progress bar and timeline
-6. View summary and transcript
-7. Download as text files
+6. View meeting record and transcript
+7. Download as Markdown or PDF
 
 ## Network Access
 
 Access from other devices on your network:
+
 ```
 http://[YOUR_IP]:8080
 ```
@@ -61,15 +64,38 @@ To find your IP, check the footer on the web page after starting.
 - **Accurate progress bar** (0-100% based on actual pipeline phase)
 - **Real-time timeline** showing each step with timestamps
 - **Chunk tracking** for long audio (e.g., "Transcribing audio (2/5)")
+- **PDF Download** — Export meeting records as styled PDFs with page numbers
 - Smooth fade-out animation when complete
-- Clean summary output
+- Clean meeting record output
 - Full transcript view
-- Download Summary/Transcript as text files
+- Download Summary/Transcript as Markdown (.md) or PDF
 - Auto-cleanup of temp files after processing
 - Page refresh cancels and resets state
 - Works offline (100% local)
 - Access from phone/tablet on same network
 - Beautiful glassmorphism UI
+
+## Download Options
+
+After processing, you can download the meeting record in two formats:
+
+| Button | Format | Description |
+|--------|--------|-------------|
+| **PDF** | `.pdf` | Styled document with page numbers, proper margins, Latin Modern typography |
+| **Download** | `.md` | Markdown for Notion, Obsidian, Slack integration |
+
+### PDF Features
+
+The generated PDF includes:
+
+- A4 page size (25mm/30mm margins)
+- Latin Modern Roman typography
+- Page numbers in footer
+- Proper heading hierarchies (h1, h2, h3)
+- Bold text preserved
+- Blockquotes with left border
+- Bulleted and numbered lists
+- Horizontal rules between major sections
 
 ## Progress Tracking
 
@@ -80,25 +106,63 @@ The progress bar accurately reflects pipeline phases:
 | Preparing | 1-5% | File upload/recording |
 | Preparing audio | 5-15% | Audio splitting |
 | Transcribing | 15-55% | Speech-to-text (per chunk) |
-| Analyzing | 55-90% | LLM summarization (per chunk) |
+| Analyzing | 55-90% | LLM meeting record generation |
 | Saving | 90-98% | Saving results |
 | Complete | 100% | Done |
 
 ### Timeline
+
 Shows each step as it happens:
+
 - Green dot = completed
 - Blue pulsing dot = in progress
 - Timestamp + message for each step
 
 ### Long Audio Processing
+
 For audio with multiple chunks:
+
 - "Transcribing audio (1/3)", "Transcribing audio (2/3)", etc.
 - "Analyzing content (1/3)", etc.
 - Progress interpolates across all chunks
 
+## Meeting Record Output
+
+The system generates a **full meeting reconstruction** (not a summary):
+
+### Structure
+
+```markdown
+# [Session Title]
+
+## Executive Summary
+[4-8 sentences covering purpose, key themes, decisions, outcome]
+
+---
+
+## Full Meeting Record
+
+### 1. [Pre-Session Setup]
+[Content]
+
+### 2. [Opening Remarks]
+[Content]
+
+... continues chronologically ...
+```
+
+### Key Features
+
+- Captures every **name**, **number**, **quote**, **anecdote**
+- Preserves full stories (not compressed)
+- Uses chronological numbered sections
+- Includes personal anecdotes and demonstrations
+- Handles code-switched speech (English + Tagalog + Bicolano)
+- Translates all dialect words to English
+
 ## Beautiful UI
 
-- Midnight blue gradient background (#1a1a2e)
+- Dark theme background (#0d1117)
 - Glassmorphism cards with blur effect
 - Gradient buttons
 - Custom scrollbars
@@ -115,10 +179,13 @@ For audio with multiple chunks:
 | Microphone not working | Check system permissions |
 | Page freezes on refresh | State auto-resets |
 | File upload shows nothing | Make sure to select file first |
+| PDF download fails | Run `brew install pango` |
 
 ## Files
 
 - `src/webui.py` - Flask web server
 - `src/progress.py` - Progress tracking system
 - `src/pipeline.py` - Audio processing pipeline
+- `src/llm.py` - Ollama integration (meeting record prompt)
+- `src/md_to_pdf.py` - Markdown to PDF conversion
 - `serverctl` - Server control script
