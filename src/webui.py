@@ -15,7 +15,7 @@ import threading
 import tempfile
 import time
 from pathlib import Path
-from flask import Flask, render_template_string, request, jsonify
+from flask import Flask, render_template_string, request, jsonify, Response
 
 # Fix path to allow local imports
 src_dir = os.path.dirname(os.path.abspath(__file__))
@@ -113,7 +113,7 @@ HTML_TEMPLATE = """
         .progress-bar { width: 100%; height: 8px; background: var(--bg-page); border-radius: 4px; overflow: hidden; border: 1px solid var(--border); }
         .progress-fill { height: 100%; background-color: var(--accent-blue); width: 0%; transition: width 0.3s ease; }
         
-        .timeline { background: var(--bg-page); border-radius: 6px; padding: 16px; margin-top: 20px; text-align: left; font-size: 13px; border: 1px solid var(--border); }
+        .timeline { background: var(--bg-page); border-radius: 6px; padding: 16px; margin-top: 20px; text-align: left; font-size: 13px; border: 1px solid var(--border); max-height: 150px; overflow-y: auto; }
         .timeline-title { opacity: 0.6; margin-bottom: 12px; text-transform: uppercase; font-size: 11px; }
         .timeline-item { display: flex; margin-bottom: 8px; }
         .timeline-item:last-child { margin-bottom: 0; }
@@ -211,7 +211,10 @@ HTML_TEMPLATE = """
                         <div>
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <h4 style="margin: 0; font-size: 14px; color: var(--text-muted);">Summary</h4>
-                                <button class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="downloadFile('summary')">Download</button>
+                                <div style="display: flex; gap: 8px;">
+                                    <button class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="downloadPDF()">PDF</button>
+                                    <button class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="downloadFile('summary')">Download</button>
+                                </div>
                             </div>
                             <div id="summary-content" class="result-content"></div>
                         </div>
@@ -341,6 +344,8 @@ HTML_TEMPLATE = """
                     html += '</div></div>';
                 });
                 timeline.innerHTML = html;
+                // Auto-scroll to bottom
+                timeline.scrollTop = timeline.scrollHeight;
             }
         }
         
@@ -378,6 +383,30 @@ HTML_TEMPLATE = """
             a.download = type + '_' + Date.now() + extension;
             a.click();
             URL.revokeObjectURL(url);
+        }
+        
+        function downloadPDF() {
+            if (!currentSummary) {
+                alert('No summary available');
+                return;
+            }
+            fetch('/pdf', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({content: currentSummary})
+            }).then(r => {
+                if (!r.ok) throw new Error('PDF generation failed');
+                return r.blob();
+            }).then(blob => {
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'summary_' + Date.now() + '.pdf';
+                a.click();
+                URL.revokeObjectURL(url);
+            }).catch(err => {
+                alert('Error generating PDF: ' + err.message);
+            });
         }
     </script>
 </body>
@@ -562,6 +591,55 @@ def get_result():
         return jsonify({'status': 'error', 'message': _last_error})
     
     return jsonify({'status': 'done', 'summary': _last_result.get('summary', ''), 'transcript': _last_result.get('transcript', '')})
+
+
+@app.route('/pdf', methods=['POST'])
+def generate_pdf():
+    """Generate PDF from markdown content"""
+    import tempfile
+    from md_to_pdf import convert
+    
+    try:
+        data = request.get_json()
+        md_content = data.get('content', '')
+        
+        if not md_content:
+            return jsonify({'error': 'No content provided'}), 400
+        
+        # Create a temp markdown file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
+            f.write(md_content)
+            md_path = f.name
+        
+        try:
+            # Generate PDF
+            pdf_path = md_path.replace('.md', '.pdf')
+            convert(md_content, pdf_path)
+            
+            # Read PDF and return
+            with open(pdf_path, 'rb') as f:
+                pdf_data = f.read()
+            
+            # Cleanup
+            os.remove(md_path)
+            os.remove(pdf_path)
+            
+            return Response(
+                pdf_data,
+                mimetype='application/pdf',
+                headers={'Content-Disposition': 'attachment; filename=summary.pdf'}
+            )
+            
+        except Exception as e:
+            # Cleanup on error
+            if os.path.exists(md_path):
+                os.remove(md_path)
+            if os.path.exists(pdf_path):
+                os.remove(pdf_path)
+            raise
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 def run_server(host='0.0.0.0', port=8080):
     local_ip = get_local_ip()
