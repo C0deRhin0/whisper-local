@@ -8,12 +8,13 @@ import json
 # Internal imports
 from audio_utils import split_audio, save_summary
 from transcriber import transcribe, _get_file_hash
-from llm import summarize
+from chunk_and_merge import process_full_transcript
 from progress import set_phase, update_chunk, complete, reset_progress, log_message
 
 # Settings
 CHUNK_DURATION_SECONDS = 180 
 BASE_DIR = pathlib.Path(__file__).parent.parent
+DEFAULT_LLM_MODEL = "llama3.1:8b"  # Back to 8b for better instruction-following
 
 def _log(msg: str):
     print(f"[Pipeline] {msg}")
@@ -69,21 +70,24 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
         initial_context = "Meeting regarding AI analytics, Firebase, SQL, Cloud Functions, and Digital Ocean in English, Tagalog, and Bicolano dialect."
 
         def transcribe_task(idx, path, prompt):
-            # Log starting state to UI immediately
-            log_message(f"Transcribing Chunk {idx+1}...")
+            # Don't log here - causes duplicate noise in timeline
             text = transcribe(path, prompt=prompt)
             return idx, text
 
         _log(f"Starting parallel transcription with 2 workers...")
+        log_message(f"Starting transcription ({total_chunks} chunks)...")
+        
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             # Submit all tasks
             futures = [executor.submit(transcribe_task, i, path, initial_context) 
                        for i, path in enumerate(chunk_paths)]
             
+            completed = 0
             for future in concurrent.futures.as_completed(futures):
                 idx, text = future.result()
                 transcripts_dict[idx] = text
-                log_message(f"Chunk {idx+1} complete.")
+                completed += 1
+                log_message(f"Chunk {completed}/{total_chunks} complete.")
                 update_chunk() # Progress in Phase 3
         
         # Reconstruct transcript in order
@@ -93,10 +97,12 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
         if not full_transcript.strip():
             raise ValueError("No speech detected in the audio.")
 
-        # Phase 4: Batch Summary
+        # Phase 4: Chunk-and-Merge Meeting Record
         set_phase(4, 1)
-        _log("Generating batch summary...")
-        summary = summarize(full_transcript)
+        log_message("Analyzing transcript (chunked)...")
+        _log("Generating meeting record with chunk-and-merge...")
+        summary = process_full_transcript(full_transcript, model=DEFAULT_LLM_MODEL)
+        log_message("Analysis complete.")
         update_chunk()
 
         # Phase 5: Save & Cache Result
