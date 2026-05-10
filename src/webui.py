@@ -15,6 +15,16 @@ import threading
 import tempfile
 import time
 from pathlib import Path
+
+# Load .env file if it exists
+from pathlib import Path as PathLib
+env_file = PathLib(__file__).parent.parent / ".env"
+if env_file.exists():
+    for line in env_file.read_text().strip().split('\n'):
+        if '=' in line and not line.startswith('#'):
+            key, val = line.split('=', 1)
+            os.environ.setdefault(key.strip(), val.strip())
+
 from flask import Flask, render_template_string, request, jsonify, Response
 
 # Fix path to allow local imports

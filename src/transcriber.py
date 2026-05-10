@@ -6,6 +6,14 @@ import tempfile
 import shutil
 import hashlib
 
+# Load .env file if it exists
+env_file = pathlib.Path(__file__).parent.parent / ".env"
+if env_file.exists():
+    for line in env_file.read_text().strip().split('\n'):
+        if '=' in line and not line.startswith('#'):
+            key, val = line.split('=', 1)
+            os.environ.setdefault(key.strip(), val.strip())
+
 # Base directory
 BASE_DIR = pathlib.Path(__file__).parent.parent
 CACHE_DIR = BASE_DIR / "data" / "cache"
