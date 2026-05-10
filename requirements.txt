@@ -3,3 +3,6 @@ requests
 flask
 markdown
 weasyprint
+pyannote.audio
+torch
+torchaudio
