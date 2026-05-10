@@ -19,10 +19,10 @@ DEFAULT_LLM_MODEL = "llama3.1:8b"  # Back to 8b for better instruction-following
 def _log(msg: str):
     print(f"[Pipeline] {msg}")
 
-def run_pipeline(audio_path: str = None, duration: int = 60, chunk_duration: int = CHUNK_DURATION_SECONDS) -> dict:
+def run_pipeline(audio_path: str = None, duration: int = 60, chunk_duration: int = CHUNK_DURATION_SECONDS, transcript_format: str = 'raw', original_filename: str = None) -> dict:
     """Run the transcription and analysis pipeline."""
     temp_file = False
-    
+
     try:
         if not audio_path:
             audio_path = os.path.join(tempfile.gettempdir(), "temp_recording.wav")
@@ -31,28 +31,49 @@ def run_pipeline(audio_path: str = None, duration: int = 60, chunk_duration: int
             _log(f"Recording audio for {duration} seconds...")
             record_audio(audio_path, duration=duration)
             temp_file = True
-        
-        return _process_audio(audio_path, chunk_duration)
-        
+
+        return _process_audio(audio_path, chunk_duration, transcript_format, original_filename)
+
     finally:
         if temp_file and audio_path and os.path.exists(audio_path):
             os.remove(audio_path)
 
 
-def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS) -> dict:
+def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS, transcript_format: str = 'raw', original_filename: str = None) -> dict:
     """Process audio file with accurate progress and full-file caching."""
-    # 1. Check Full File Cache
-    file_hash = _get_file_hash(audio_path)
-    cache_dir = BASE_DIR / "data" / "cache"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / f"full_{file_hash}.json"
-    
+    # Use original filename for foldered cache, or fallback to hash-based name
+    if original_filename:
+        # Sanitize filename for folder name
+        safe_name = "".join(c for c in original_filename if c.isalnum() or c in ('.', '-', '_'))
+        cache_folder = BASE_DIR / "data" / "cache" / safe_name
+    else:
+        file_hash = _get_file_hash(audio_path)
+        cache_folder = BASE_DIR / "data" / "cache" / file_hash
+
+    cache_folder.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_folder / "result.json"
+
+    # Check if cache exists
     if cache_path.exists():
-        _log("CACHE HIT: Loading existing results for this file.")
+        _log(f"CACHE HIT: Loading existing results from {cache_folder.name}/")
         with open(cache_path, 'r') as f:
             cached_data = json.load(f)
-            complete() # Mark 100% in UI
-            return cached_data
+
+        # Return the requested format
+        if transcript_format == 'formatted':
+            return {
+                "transcript": cached_data.get('formatted_transcript', ''),
+                "raw_transcript": cached_data.get('raw_transcript', ''),
+                "summary": cached_data.get('summary', ''),
+                "output_file": cached_data.get('output_file', '')
+            }
+        else:
+            return {
+                "transcript": cached_data.get('raw_transcript', ''),
+                "raw_transcript": cached_data.get('raw_transcript', ''),
+                "summary": cached_data.get('summary', ''),
+                "output_file": cached_data.get('output_file', '')
+            }
 
     chunk_dir = tempfile.mkdtemp(prefix="whisper_chunks_")
     
@@ -70,25 +91,42 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
         initial_context = "Meeting regarding AI analytics, Firebase, SQL, Cloud Functions, and Digital Ocean in English, Tagalog, and Bicolano dialect."
 
         def transcribe_task(idx, path, prompt):
-            # Don't log here - causes duplicate noise in timeline
-            text = transcribe(path, prompt=prompt)
-            return idx, text
+            """Transcribe a single chunk with error handling."""
+            try:
+                _log(f"Transcribing chunk {idx + 1}/{total_chunks}...")
+                text = transcribe(path, prompt=prompt)
+                return idx, text, None
+            except Exception as e:
+                _log(f"Error transcribing chunk {idx + 1}: {e}")
+                return idx, "", str(e)
 
         _log(f"Starting parallel transcription with 2 workers...")
         log_message(f"Starting transcription ({total_chunks} chunks)...")
-        
+
+        errors = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             # Submit all tasks
-            futures = [executor.submit(transcribe_task, i, path, initial_context) 
+            futures = [executor.submit(transcribe_task, i, path, initial_context)
                        for i, path in enumerate(chunk_paths)]
-            
+
             completed = 0
             for future in concurrent.futures.as_completed(futures):
-                idx, text = future.result()
+                idx, text, error = future.result()
+                if error:
+                    errors.append(f"Chunk {idx + 1}: {error}")
+                    _log(f"Warning: Chunk {idx + 1} failed: {error}")
                 transcripts_dict[idx] = text
                 completed += 1
-                log_message(f"Chunk {completed}/{total_chunks} complete.")
+                # Log immediately for UI visibility
+                msg = f"Chunk {completed}/{total_chunks} complete."
+                _log(msg)
+                log_message(msg)
                 update_chunk() # Progress in Phase 3
+
+        if errors:
+            _log(f"Warning: {len(errors)} chunks had errors: {errors}")
+        else:
+            _log(f"All {total_chunks} chunks transcribed successfully!")
         
         # Reconstruct transcript in order
         transcripts = [transcripts_dict[i] for i in range(len(chunk_paths)) if transcripts_dict.get(i)]
@@ -100,25 +138,57 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
         # Phase 4: Chunk-and-Merge Meeting Record
         set_phase(4, 1)
         log_message("Analyzing transcript (chunked)...")
-        _log("Generating meeting record with chunk-and-merge...")
+        _log(f"Generating meeting record from {len(full_transcript)} chars of transcript...")
         summary = process_full_transcript(full_transcript, model=DEFAULT_LLM_MODEL)
+        _log("Analysis complete!")
         log_message("Analysis complete.")
         update_chunk()
 
         # Phase 5: Save & Cache Result
         set_phase(5)
         _log("Saving results...")
+
+        # Get the original file name for formatting
+        original_file_name = original_filename if original_filename else (os.path.basename(audio_path) if audio_path else "audio")
+
+        # Always generate both raw and formatted transcripts
+        from transcriber import format_transcript
+        formatted_transcript = format_transcript(
+            full_transcript,
+            file_name=original_file_name,
+            language=None,
+            audio_path=audio_path
+        )
+
         output_file = save_summary(full_transcript, summary, "summaries")
-        
-        result = {
-            "transcript": full_transcript,
+
+        # Store BOTH formats in cache
+        cached_data = {
+            "raw_transcript": full_transcript,
+            "formatted_transcript": formatted_transcript,
             "summary": summary,
             "output_file": output_file
         }
-        
-        # Save to cache for next time
+
+        # Save to foldered cache
         with open(cache_path, 'w') as f:
-            json.dump(result, f)
+            json.dump(cached_data, f)
+
+        # Return the requested format
+        if transcript_format == 'formatted':
+            result = {
+                "transcript": formatted_transcript,
+                "raw_transcript": full_transcript,
+                "summary": summary,
+                "output_file": output_file
+            }
+        else:
+            result = {
+                "transcript": full_transcript,
+                "raw_transcript": full_transcript,
+                "summary": summary,
+                "output_file": output_file
+            }
             
         complete()
         return result
