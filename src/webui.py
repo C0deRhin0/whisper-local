@@ -144,7 +144,7 @@ HTML_TEMPLATE = """
             <div class="panel-left" style="display: flex; flex-direction: column; gap: 24px;">
                 <div class="panel" id="input-panel">
                     <h2 style="margin: 0 0 16px 0; font-size: 18px;">Input Audio</h2>
-                    
+
                     <div id="upload-card">
                         <div class="file-input-wrapper">
                             <label for="audioFile" class="file-label" id="fileLabel">
@@ -155,6 +155,21 @@ HTML_TEMPLATE = """
                             <input type="file" id="audioFile" accept=".wav,.mp3,.m4a,.aac,.ogg">
                             <div class="file-selected" id="fileSelected"></div>
                         </div>
+
+                        <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
+                            <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Transcript Format:</label>
+                            <div style="display: flex; gap: 12px;">
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                    <input type="radio" name="transcriptFormat" value="raw" checked>
+                                    Raw (Plain Text)
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                    <input type="radio" name="transcriptFormat" value="formatted">
+                                    Formatted (Speaker Labels)
+                                </label>
+                            </div>
+                        </div>
+
                         <button class="btn-primary" style="width: 100%; margin-bottom: 16px;" id="uploadBtn" disabled>Upload and Process</button>
                     </div>
                     
@@ -266,12 +281,15 @@ HTML_TEMPLATE = """
         document.getElementById('uploadBtn').onclick = function() {
             var file = document.getElementById('audioFile').files[0];
             if(!file) return;
-            
+
             showProcessing();
-            
+
+            var format = document.querySelector('input[name="transcriptFormat"]:checked').value;
+
             var formData = new FormData();
             formData.append('audio', file);
-            
+            formData.append('format', format);
+
             fetch('/upload', { method: 'POST', body: formData }).then(r=>r.json()).then(handleResponse);
         };
         
@@ -280,10 +298,12 @@ HTML_TEMPLATE = """
             if (duration < 5) { alert('Min duration is 5s'); return; }
             if (duration > 600) { alert('Max duration is 600s'); return; }
             showProcessing();
-            
+
+            var format = document.querySelector('input[name="transcriptFormat"]:checked').value;
+
             fetch('/record', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({duration: duration})
+                body: JSON.stringify({duration: duration, format: format})
             }).then(r=>r.json()).then(handleResponse);
         };
         
@@ -480,37 +500,43 @@ def stop():
 def upload():
     global stop_flag
     stop_flag = False
-    
+
     try:
         if 'audio' not in request.files:
             return jsonify({'status': 'error', 'message': 'No file uploaded'})
-        
+
         audio = request.files['audio']
         if not audio or audio.filename == '':
             return jsonify({'status': 'error', 'message': 'No file selected'})
-        
+
+        # Get format option (default to raw)
+        transcript_format = request.form.get('format', 'raw')
+
+        # Get original filename for caching
+        original_filename = audio.filename
+
         # Save temp file
-        ext = '.' + audio.filename.split('.')[-1].lower()
+        ext = '.' + original_filename.split('.')[-1].lower()
         temp_path = tempfile.mktemp(suffix=ext)
         audio.save(temp_path)
-        
+
         # Start progress tracking
         start(1, 'upload')
-        
+
         def process():
             from pipeline import run_pipeline
             global stop_flag
-            
+
             try:
                 if stop_flag:
                     return
-                result = run_pipeline(temp_path)
-                
+                result = run_pipeline(temp_path, transcript_format=transcript_format, original_filename=original_filename)
+
                 if not stop_flag:
                     # Get the transcript/summary from result
                     summary = result.get('summary', 'No summary')
                     transcript = result.get('transcript', 'No transcript')
-                    
+
                     # Store result in a global for retrieval (simplified)
                     global _last_result
                     _last_result = {'summary': summary, 'transcript': transcript}
@@ -534,31 +560,32 @@ def upload():
 def record():
     global stop_flag
     stop_flag = False
-    
+
     try:
         duration = request.json.get('duration', 60)
+        transcript_format = request.json.get('format', 'raw')
         temp_path = tempfile.mktemp(suffix='.wav')
-        
+
         # Start progress tracking
         start(1, 'record')
-        
+
         def record_and_process():
             from recorder import record_audio
             from pipeline import run_pipeline
             global stop_flag
-            
+
             try:
                 if stop_flag:
                     return
-                
+
                 # Recording phase
                 record_audio(temp_path, duration=duration)
-                
+
                 if stop_flag:
                     return
-                
-                result = run_pipeline(temp_path)
-                
+
+                result = run_pipeline(temp_path, transcript_format=transcript_format, original_filename="recording.wav")
+
                 if not stop_flag:
                     global _last_result
                     _last_result = {'summary': result.get('summary', ''), 'transcript': result.get('transcript', '')}
