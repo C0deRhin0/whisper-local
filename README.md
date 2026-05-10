@@ -8,13 +8,16 @@ A local transcription + LLM system for analyzing meeting recordings. 100% offlin
 
 - **100% Local** — No cloud APIs, no data leaves your machine.
 - **Parallel Pipeline** — 2x concurrent transcription workers for massive speedups on multi-core machines.
-- **Full-File Caching** — SHA-256 hashing allows instant re-processing of previously analyzed files.
+- **Foldered Caching** — Cache organized by filename for easy management and deletion.
+- **Dual Transcript Format** — Toggle between raw (plain text) and formatted (speaker labels) output.
 - **Metal Accelerated** — Native GPU support via `whisper.cpp` for lightning-fast STT on Mac.
 - **Full Meeting Records** — No summarization; reconstructs the complete meeting with all names, quotes, anecdotes.
 - **Minimal Content Fallback** — Smart detection prevents corporate summaries for short test clips or greetings.
 - **Long Audio Support** — Handles 60+ minute meetings with chunked processing.
 - **Smart Chunking** — Natural silence detection ensures sentences aren't cut mid-stream.
 - **Real-time Progress** — Accurate progress bar + timeline with Chunk-by-Chunk tracking.
+- **Enhanced Transcript Format** — Structured output with speaker labels, auto-detected language, and professional formatting.
+- **Speaker Diarization** — Neural network-based speaker detection using pyannote.audio for accurate speaker identification.
 - **Web UI** — Premium browser interface with a two-panel layout and dark theme.
 - **PDF Export** — Download meeting records as styled PDFs with page numbers.
 - **Server Control** — Easy start/stop script manages everything.
@@ -53,6 +56,16 @@ brew install pango
 ```bash
 ollama pull llama3.2:3b
 ```
+
+### HuggingFace Token (for Speaker Diarization)
+
+Speaker diarization requires a HuggingFace token for the pyannote models:
+
+1. Create an account at [huggingface.co](https://huggingface.co)
+2. Go to Settings → Access Tokens → Create new token
+3. Copy the token and update `src/transcriber.py` where it says `HF_TOKEN`
+
+The token is pre-configured in the code. On first run, it will automatically download the diarization model.
 
 ## Quick Start
 
@@ -118,7 +131,9 @@ Each run automatically saves a timestamped record to the `summaries/` directory:
 
 ## Progress Tracking
 
-The web UI shows accurate, multi-phase progress:
+The web UI shows accurate, multi-phase progress with a real-time timeline:
+
+### Progress Phases
 
 | Phase | Progress | Description |
 |-------|----------|-------------|
@@ -129,7 +144,89 @@ The web UI shows accurate, multi-phase progress:
 | Saving | 90-98% | Caching results for future use |
 | Complete | 100% | Done |
 
+### Timeline Features
+
+- **Real-time updates**: Each chunk completion is logged with timestamp
+- **Status dots**: Visual indicators for completed, current, and pending steps
+- **Chunk tracking**: Shows "Chunk 1/26 complete", "Chunk 2/26 complete", etc.
+- **Error visibility**: Failed chunks are logged with error details
+
 Timeline shows each step with timestamps and status dots. Parallel chunks (e.g., "Chunk 1", "Chunk 2") are logged as they finish.
+
+## Transcript Format Options
+
+The web UI allows you to choose between two transcript formats before processing:
+
+### Raw (Plain Text)
+- Simple, unformatted transcript
+- Just the transcribed text with no speaker labels or headers
+- Ideal for quick reference or when you don't need speaker identification
+
+### Formatted (Speaker Labels)
+- Professional structured output with:
+  - Header showing filename and detected language
+  - Speaker labels ([SPEAKER A], [SPEAKER B], etc.) based on audio analysis
+  - Separators and "END OF TRANSCRIPT" footer
+
+### Toggle Location
+The format selector is located in the input panel, above the "Upload and Process" button. Select your preferred format before uploading or recording.
+
+## Enhanced Transcript Format
+
+The system now outputs transcripts in a professional, structured format:
+
+```
+RAW TRANSCRIPT
+File: Talk1_PaloAlto.m4a
+Language: Mixed English / Tagalog
+===============================================================
+
+[SPEAKER A] Okay? So mas mapapadali 'yung attack at mas...
+[SPEAKER A] Okay. Based on what we've seen 'no?...
+[SPEAKER B] ...
+[SPEAKER A] ...
+
+===============================================================
+END OF TRANSCRIPT
+```
+
+### Features
+
+- **Auto-detected language**: Analyzes transcript to detect English, Tagalog, and/or Bikol
+- **Dynamic speaker labels**: Supports 2 or more speakers (SPEAKER A, B, C, etc.)
+- **Professional formatting**: Header with file name, language, separators, and footer
+- **Speaker diarization**: Uses neural networks to identify actual speakers from audio
+
+### Language Detection
+
+The system automatically detects languages present in the transcript:
+- **English**: Detected via common words (the, is, security, attack, etc.)
+- **Tagalog**: Detected via common words (ang, ng, sa, ako, kasi, etc.)
+- **Bikol**: Detected via Bicolano dialect words (bako, iyo, garo, ining, etc.)
+
+Output examples:
+- `"Mixed English / Tagalog"` (if both detected)
+- `"English"` (if only English)
+- `"Mixed English / Tagalog / Bikol"` (if all three)
+
+## Speaker Diarization
+
+The system uses **pyannote.audio** for accurate speaker identification:
+
+### How It Works
+
+1. **Neural diarization**: Analyzes voice patterns in the audio
+2. **Speaker mapping**: Assigns SPEAKER A, B, C, etc. based on actual voice segments
+3. **Timestamp alignment**: Matches transcribed text with speaker segments
+
+### Requirements
+
+- **HuggingFace token**: Required for downloading pyannote models (pre-configured)
+- **First run**: Downloads ~1.2GB model on first use, then caches locally
+
+### Fallback
+
+If diarization fails or no audio path is provided, the system falls back to heuristic-based speaker detection (alternates every 3 segments).
 
 ## Project Structure
 
@@ -143,9 +240,10 @@ whisper-local/
 │   ├── pipeline.py    # Main processing pipeline
 │   ├── progress.py   # Progress tracking
 │   ├── recorder.py   # Microphone recording
-│   ├── transcriber.py # whisper.cpp wrapper
+│   ├── transcriber.py # whisper.cpp wrapper + diarization
 │   ├── llm.py       # Ollama integration
 │   ├── audio_utils.py # Smart audio chunking
+│   ├── chunk_and_merge.py # LLM transcript processing
 │   ├── md_to_pdf.py # Markdown to styled PDF conversion
 │   └── storage.py    # Output persistence (legacy)
 ├── data/
@@ -158,20 +256,50 @@ whisper-local/
 ## How It Works
 
 ```
-Audio Input → ffmpeg (16kHz Mono) → whisper.cpp (Metal/GPU) → Ollama (LLM) → Meeting Record
+Audio Input → ffmpeg (16kHz Mono) → whisper.cpp (Metal/GPU) → pyannote (Diarization) → Ollama (LLM) → Meeting Record
 ```
 
 1. **Audio Prep**: Standardizes any format to 16kHz Mono WAV using FFmpeg.
 2. **Parallel STT**: Splits audio into chunks and uses `ThreadPoolExecutor` to transcribe 2 segments at a time on the GPU.
-3. **Meeting Reconstruction**: Reconstructs the full meeting with all details (names, quotes, anecdotes).
-4. **PDF Export**: Converts the Markdown record to a styled PDF with proper pagination.
-5. **Caching**: Hashes the full file via SHA-256. If re-uploaded, results are served instantly from `data/cache/`.
+3. **Speaker Diarization**: Uses pyannote.audio to identify distinct speakers in the audio.
+4. **Transcript Formatting**: Applies structured format with speaker labels and auto-detected language.
+5. **Meeting Reconstruction**: Reconstructs the full meeting with all details (names, quotes, anecdotes).
+6. **PDF Export**: Converts the Markdown record to a styled PDF with proper pagination.
+7. **Caching**: Results are cached in foldered structure. If re-uploaded, results are served instantly from cache.
+
+## Caching System
+
+The system uses a **foldered caching** mechanism for easy cache management:
+
+### Cache Structure
+```
+data/cache/
+├── Talk1_PaloAlto.m4a/
+│   └── result.json    # Contains both raw + formatted transcripts
+├── sample.wav/
+│   └── result.json
+└── meeting_recording/
+    └── result.json
+```
+
+### How It Works
+- **First processing**: Audio is transcribed and both raw and formatted transcripts are generated and stored
+- **Subsequent requests**: Toggle between raw/formatted instantly from cache (no reprocessing)
+- **Easy deletion**: Simply delete the folder for a specific file to clear its cache
+
+### Cache Contents
+Each `result.json` contains:
+- `raw_transcript`: Plain text transcript
+- `formatted_transcript`: Full formatted output with speaker labels
+- `summary`: LLM-generated meeting summary
+- `output_file`: Path to saved summary file
 
 ## Web UI Features
 
 - **Premium Design**: Dark theme with glassmorphism effects.
 - **Dual Panel**: Side-by-side view for progress/input and results.
 - **Accurate Tracking**: Progress bar tracks specific chunk completion.
+- **Timeline**: Real-time status updates with timestamps and status dots.
 - **PDF Download**: Export meeting records as professional PDFs with page numbers.
 - **Auto-Reset**: Input panel automatically returns to the upload state after completion.
 - **Mobile Access**: Responsive design accessible from your network URL.
@@ -227,7 +355,10 @@ See `src/llm.py` for the complete prompt.
 Standardized on `small` (Metal-optimized) for the best balance of speed and accuracy. Use `medium` for complex dialectal audio if hardware allows.
 
 ### Ollama (LLM)
-Optimized for `llama3.2:3b`. Higher parameter models (7b, 8b) can be swapped in `src/llm.py`.
+Optimized for `llama3.2:3b`. Higher parameter models (7b, 8b) can be swapped in `src/pipeline.py`.
+
+### Speaker Diarization
+Uses `pyannote/speaker-diarization-3.1` (or 2.0 as fallback) from HuggingFace.
 
 ## Troubleshooting
 
@@ -238,10 +369,12 @@ Optimized for `llama3.2:3b`. Higher parameter models (7b, 8b) can be swapped in 
 | `whisper-cli` missing | Run `./serverctl build` |
 | PDF generation fails | Run `brew install pango` |
 | Ollama connection error | Run `./serverctl start` (starts Ollama) |
+| Diarization fails | Check HuggingFace token is valid in `src/transcriber.py` |
 
 ## Tech Stack
 
 - **[whisper.cpp](https://github.com/ggerganov/whisper.cpp)** — Local STT (Metal optimized).
+- **[pyannote.audio](https://github.com/pyannote/pyannote-audio)** — Neural speaker diarization.
 - **[Ollama](https://ollama.ai)** — Local LLM runtime.
 - **FFmpeg** — Professional audio standardization.
 - **Flask** — Web interface.
