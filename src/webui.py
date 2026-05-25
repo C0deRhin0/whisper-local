@@ -288,6 +288,8 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
                         
+                        <button class="btn-danger" style="width: 100%; display: none; margin: 16px 0;" id="stopRecordingBtn">■ Stop Recording</button>
+                        
                         <div class="timeline" id="timeline">
                             <div class="timeline-title">Status</div>
                         </div>
