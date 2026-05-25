@@ -47,6 +47,8 @@ PHASE_PROGRESS = {
 OPERATION_DISPLAY = {
     'upload': 'Uploading file...',
     'record': 'Recording audio...',
+    'text': 'Processing text...',
+    'transcribe_only': 'Transcribing audio...',
 }
 
 def reset_progress():
