@@ -375,33 +375,87 @@ HTML_TEMPLATE = """
             showProcessing();
 
             var format = document.querySelector('input[name="transcriptFormat"]:checked').value;
+            var mode = document.querySelector('input[name="uploadMode"]:checked').value;
 
             var formData = new FormData();
             formData.append('audio', file);
             formData.append('format', format);
+            formData.append('mode', mode);
 
             fetch('/upload', { method: 'POST', body: formData }).then(r=>r.json()).then(handleResponse);
         };
-        
-        document.getElementById('recordBtn').onclick = function() {
-            var duration = parseInt(document.getElementById('duration').value);
-            if (duration < 5) { alert('Min duration is 5s'); return; }
-            if (duration > 600) { alert('Max duration is 600s'); return; }
-            showProcessing();
 
-            var format = document.querySelector('input[name="transcriptFormat"]:checked').value;
+        // ===== Recording (Manual Start/Stop) =====
+        document.getElementById('recordBtn').onclick = function() {
+            var format = document.querySelector('input[name="recordFormat"]:checked').value;
+            var mode = document.querySelector('input[name="recordMode"]:checked').value;
+
+            showRecording();
 
             fetch('/record', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({duration: duration, format: format})
-            }).then(r=>r.json()).then(handleResponse);
+                body: JSON.stringify({format: format, mode: mode})
+            }).then(r=>r.json()).then(handleRecordResponse);
         };
-        
+
+        document.getElementById('stopRecordingBtn').onclick = function() {
+            var btn = document.getElementById('stopRecordingBtn');
+            btn.disabled = true;
+            btn.innerText = 'Stopping...';
+            fetch('/stop-recording', { method: 'POST' });
+        };
+
+        // ===== Text Analysis =====
+        document.getElementById('textFile').onchange = function() {
+            var file = this.files[0];
+            var selected = document.getElementById('textFileSelected');
+            var label = document.getElementById('textFileLabel');
+            
+            if(file) {
+                selected.style.display = 'block';
+                selected.innerHTML = 'Selected: ' + file.name + ' (' + (file.size/1024).toFixed(1) + ' KB)';
+                label.style.display = 'none';
+            }
+        };
+
+        document.getElementById('analyzeTextBtn').onclick = function() {
+            var text = document.getElementById('textInput').value.trim();
+            var textFile = document.getElementById('textFile').files[0];
+            
+            if(textFile) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    sendTextForAnalysis(e.target.result);
+                };
+                reader.readAsText(textFile);
+            } else if(text) {
+                sendTextForAnalysis(text);
+            } else {
+                alert('Please upload a .txt file or paste text.');
+            }
+        };
+
+        function sendTextForAnalysis(text) {
+            showProcessing();
+            fetch('/analyze-text', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text: text})
+            }).then(r=>r.json()).then(handleResponse);
+        }
+
+        // ===== Response Handlers =====
         function handleResponse(d) {
-            if(d.status === 'started') { startPolling(); } 
+            if(d.status === 'started') { startPolling(); }
+            else if(d.status === 'recording') { startPolling(); }
             else { alert(d.message || 'Error'); location.reload(); }
         }
-        
+
+        function handleRecordResponse(d) {
+            if(d.status === 'recording') { startPolling(); }
+            else { alert(d.message || 'Error'); location.reload(); }
+        }
+
+        // ===== UI State Functions =====
         function showProcessing() {
             document.getElementById('input-panel').style.display = 'none';
             document.getElementById('processing-card').style.display = 'flex';
@@ -409,19 +463,45 @@ HTML_TEMPLATE = """
             document.getElementById('result-card').style.display = 'none';
             document.getElementById('no-result').style.display = 'flex';
             
+            document.getElementById('stopRecordingBtn').style.display = 'none';
             document.getElementById('progress-fill').style.width = '1%';
             document.getElementById('progress-percent').innerText = '1%';
             document.getElementById('phase-name').innerText = 'Starting...';
             document.getElementById('timeline').innerHTML = '<div class="timeline-title">Status</div>';
         }
-        
+
+        function showRecording() {
+            document.getElementById('input-panel').style.display = 'none';
+            document.getElementById('processing-card').style.display = 'flex';
+            document.getElementById('error-card').style.display = 'none';
+            document.getElementById('result-card').style.display = 'none';
+            document.getElementById('no-result').style.display = 'flex';
+            
+            document.getElementById('stopRecordingBtn').style.display = 'block';
+            document.getElementById('stopRecordingBtn').disabled = false;
+            document.getElementById('stopRecordingBtn').innerText = '■ Stop Recording';
+            document.getElementById('progress-fill').style.width = '5%';
+            document.getElementById('progress-percent').innerText = 'Recording...';
+            document.getElementById('phase-name').innerText = 'Recording...';
+            document.getElementById('timeline').innerHTML = '<div class="timeline-title">Status</div><div class="timeline-item current"><div class="timeline-dot"></div><div>Recording audio... Click Stop when done.</div></div>';
+        }
+
         function startPolling() { pollInterval = setInterval(pollStatus, 1200); }
         
         function pollStatus() {
             fetch('/status').then(r=>r.json()).then(d=>{
-                if(d.status === 'processing') { updateProgress(d); } 
-                else if(d.status === 'done') {
+                if(d.status === 'recording') {
+                    // Show recording state with elapsed time
+                    document.getElementById('stopRecordingBtn').style.display = 'block';
+                    document.getElementById('progress-fill').style.width = '5%';
+                    document.getElementById('progress-percent').innerText = Math.floor(d.elapsed) + 's';
+                    document.getElementById('phase-name').innerText = 'Recording... (' + Math.floor(d.elapsed) + 's)';
+                } else if(d.status === 'processing') {
+                    document.getElementById('stopRecordingBtn').style.display = 'none';
+                    updateProgress(d);
+                } else if(d.status === 'done') {
                     clearInterval(pollInterval);
+                    document.getElementById('stopRecordingBtn').style.display = 'none';
                     document.getElementById('processing-card').style.display = 'none';
                     showResult(d.summary, d.transcript);
                 } else if(d.status === 'error') {
