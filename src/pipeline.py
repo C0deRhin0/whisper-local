@@ -14,13 +14,25 @@ from progress import set_phase, update_chunk, complete, reset_progress, log_mess
 # Settings
 CHUNK_DURATION_SECONDS = 180 
 BASE_DIR = pathlib.Path(__file__).parent.parent
-DEFAULT_LLM_MODEL = "llama3.1:8b"  # Back to 8b for better instruction-following
+DEFAULT_LLM_MODEL = "llama3.2:3b"  # Lightweight 3b model for faster inference
 
 def _log(msg: str):
     print(f"[Pipeline] {msg}")
 
-def run_pipeline(audio_path: str = None, duration: int = 60, chunk_duration: int = CHUNK_DURATION_SECONDS, transcript_format: str = 'raw', original_filename: str = None) -> dict:
-    """Run the transcription and analysis pipeline."""
+def run_pipeline(audio_path: str = None, duration: int = 60, chunk_duration: int = CHUNK_DURATION_SECONDS, transcript_format: str = 'raw', original_filename: str = None, mode: str = 'full') -> dict:
+    """Run the transcription and analysis pipeline.
+    
+    Args:
+        audio_path: Path to audio file, or None to record from microphone
+        duration: Recording duration in seconds
+        chunk_duration: Audio chunk duration for splitting
+        transcript_format: 'raw' or 'formatted'
+        original_filename: Original filename for caching
+        mode: 'full' (transcribe + summarize) or 'transcribe_only'
+    
+    Returns:
+        dict with 'transcript', 'summary', etc.
+    """
     temp_file = False
 
     try:
@@ -32,15 +44,19 @@ def run_pipeline(audio_path: str = None, duration: int = 60, chunk_duration: int
             record_audio(audio_path, duration=duration)
             temp_file = True
 
-        return _process_audio(audio_path, chunk_duration, transcript_format, original_filename)
+        return _process_audio(audio_path, chunk_duration, transcript_format, original_filename, mode)
 
     finally:
         if temp_file and audio_path and os.path.exists(audio_path):
             os.remove(audio_path)
 
 
-def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS, transcript_format: str = 'raw', original_filename: str = None) -> dict:
-    """Process audio file with accurate progress and full-file caching."""
+def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS, transcript_format: str = 'raw', original_filename: str = None, mode: str = 'full') -> dict:
+    """Process audio file with accurate progress and full-file caching.
+    
+    Args:
+        mode: 'full' (transcribe + summarize) or 'transcribe_only'
+    """
     # Use original filename for foldered cache, or fallback to hash-based name
     if original_filename:
         # Sanitize filename for folder name
