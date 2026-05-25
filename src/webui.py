@@ -473,7 +473,7 @@ def get_ip():
 
 @app.route('/status')
 def status():
-    global stop_flag, _last_result, _last_error
+    global stop_flag, _last_result, _last_error, _is_recording, _recording_start_time
     
     if stop_flag:
         stop_flag = False
@@ -481,6 +481,52 @@ def status():
         _last_result = {'summary': '', 'transcript': ''}
         _last_error = None
         return jsonify({'status': 'idle'})
+    
+    # Check recording state first
+    if _is_recording:
+        elapsed = time.time() - _recording_start_time
+        return jsonify({
+            'status': 'recording',
+            'elapsed': round(elapsed, 1),
+            'progress': 5,
+            'phase_name': 'Recording...'
+        })
+    
+    # Check for error first
+    if _last_error:
+        error = _last_error
+        _last_error = None
+        return jsonify({'status': 'error', 'message': error})
+    
+    # Check for completed result
+    if _last_result.get('summary') or _last_result.get('transcript'):
+        result = _last_result.copy()
+        _last_result = {'summary': '', 'transcript': ''}
+        # Reset progress after returning result
+        reset_progress()
+        return jsonify({
+            'status': 'done',
+            'summary': result.get('summary', ''),
+            'transcript': result.get('transcript', ''),
+            'progress': 100,
+            'message': 'Complete!'
+        })
+    
+    # Get progress from the progress module
+    prog = get_progress()
+    
+    if prog['active']:
+        return jsonify({
+            'status': 'processing',
+            'progress': prog['progress'],
+            'message': prog['message'],
+            'phase_name': prog['phase_name'],
+            'current_chunk': prog['current_chunk'],
+            'total_chunks': prog['total_chunks'],
+            'steps': prog['steps']
+        })
+    
+    return jsonify({'status': 'idle'})
     
     # Check for error first
     if _last_error:
@@ -528,18 +574,25 @@ def stop():
 @app.route('/upload', methods=['POST'])
 def upload():
     global stop_flag
+    
+    if not _start_processing():
+        return jsonify({'status': 'error', 'message': 'Already processing an operation. Please wait for it to complete.'})
+
     stop_flag = False
 
     try:
         if 'audio' not in request.files:
+            _end_processing()
             return jsonify({'status': 'error', 'message': 'No file uploaded'})
 
         audio = request.files['audio']
         if not audio or audio.filename == '':
+            _end_processing()
             return jsonify({'status': 'error', 'message': 'No file selected'})
 
-        # Get format option (default to raw)
+        # Get options
         transcript_format = request.form.get('format', 'raw')
+        mode = request.form.get('mode', 'full')
 
         # Get original filename for caching
         original_filename = audio.filename
