@@ -636,56 +636,138 @@ def upload():
         return jsonify({'status': 'started'})
         
     except Exception as e:
+        _end_processing()
         return jsonify({'status': 'error', 'message': str(e)})
 
 @app.route('/record', methods=['POST'])
 def record():
-    global stop_flag
+    global stop_flag, _is_recording, _recording_stop_flag, _recording_start_time
+    
+    if not _start_processing():
+        return jsonify({'status': 'error', 'message': 'Already processing an operation. Please wait for it to complete.'})
+
     stop_flag = False
+    _recording_stop_flag = False
 
     try:
-        duration = request.json.get('duration', 60)
         transcript_format = request.json.get('format', 'raw')
+        mode = request.json.get('mode', 'full')
         temp_path = tempfile.mktemp(suffix='.wav')
 
-        # Start progress tracking
-        start(1, 'record')
-
         def record_and_process():
-            from recorder import record_audio
+            from recorder import record_audio_manual
             from pipeline import run_pipeline
-            global stop_flag
+            global stop_flag, _is_recording, _recording_stop_flag
 
             try:
+                # Manual recording phase
+                _is_recording = True
+                record_audio_manual(temp_path, stop_check=lambda: _recording_stop_flag)
+                _is_recording = False
+
                 if stop_flag:
                     return
 
-                # Recording phase
-                record_audio(temp_path, duration=duration)
-
-                if stop_flag:
-                    return
-
-                result = run_pipeline(temp_path, transcript_format=transcript_format, original_filename="recording.wav")
+                result = run_pipeline(temp_path, transcript_format=transcript_format, 
+                                      original_filename="recording.wav", mode=mode)
 
                 if not stop_flag:
                     global _last_result
-                    _last_result = {'summary': result.get('summary', ''), 'transcript': result.get('transcript', '')}
+                    _last_result = {
+                        'summary': result.get('summary', '') if mode != 'transcribe_only' else '',
+                        'transcript': result.get('transcript', '')
+                    }
             except Exception as e:
                 global _last_error
                 _last_error = str(e)
             finally:
+                _end_processing()
                 try:
                     if temp_path and os.path.exists(temp_path):
                         os.remove(temp_path)
                 except:
                     pass
         
+        _recording_start_time = time.time()
         threading.Thread(target=record_and_process).start()
-        return jsonify({'status': 'started'})
+        return jsonify({'status': 'recording'})
         
     except Exception as e:
+        _is_recording = False
+        _end_processing()
         return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/stop-recording', methods=['POST'])
+def stop_recording():
+    """Stop the active recording."""
+    global _recording_stop_flag, _is_recording
+    
+    if not _is_recording:
+        return jsonify({'status': 'error', 'message': 'No active recording to stop.'})
+    
+    _recording_stop_flag = True
+    return jsonify({'status': 'stopping', 'message': 'Recording stopping...'})
+
+
+@app.route('/analyze-text', methods=['POST'])
+def analyze_text():
+    """Accept text content and run it through the LLM analysis pipeline."""
+    if not _start_processing():
+        return jsonify({'status': 'error', 'message': 'Already processing an operation. Please wait for it to complete.'})
+
+    try:
+        text = ''
+
+        # Check for file upload first
+        if 'file' in request.files:
+            uploaded_file = request.files['file']
+            if uploaded_file and uploaded_file.filename:
+                text = uploaded_file.read().decode('utf-8', errors='replace')
+        elif request.is_json:
+            data = request.get_json()
+            text = data.get('text', '')
+        elif request.form:
+            text = request.form.get('text', '')
+
+        if not text or not text.strip():
+            _end_processing()
+            return jsonify({'status': 'error', 'message': 'No text provided. Upload a .txt file or paste text.'})
+
+        # Limit text size
+        if len(text) > 500000:
+            text = text[:500000]
+            print("[Analyze-Text] Truncated input to 500K chars")
+
+        start(1, 'text')
+
+        def process():
+            from pipeline import process_text
+            global stop_flag
+
+            try:
+                if stop_flag:
+                    return
+                result = process_text(text)
+
+                if not stop_flag:
+                    global _last_result
+                    _last_result = {
+                        'summary': result.get('summary', ''),
+                        'transcript': result.get('transcript', '')
+                    }
+            except Exception as e:
+                global _last_error
+                _last_error = str(e)
+            finally:
+                _end_processing()
+
+        threading.Thread(target=process).start()
+        return jsonify({'status': 'started'})
+
+    except Exception as e:
+        _end_processing()
+        return jsonify({'status': 'error', 'message': str(e)})
+
 
 # Global to store last result (simple approach)
 _last_result = {'summary': '', 'transcript': ''}
