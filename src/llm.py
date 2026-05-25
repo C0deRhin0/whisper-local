@@ -1,7 +1,7 @@
 import requests
 import json
 
-def summarize(new_transcript: str, prior_summary: str = "", model: str = "llama3.1:8b") -> str:
+def summarize(new_transcript: str, prior_summary: str = "", model: str = "llama3.2:3b") -> str:
     """Send transcript to local Ollama LLM for structured analysis."""
     url = "http://localhost:11434/api/generate"
     
