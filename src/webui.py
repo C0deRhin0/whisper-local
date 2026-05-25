@@ -352,7 +352,8 @@ HTML_TEMPLATE = """
                 document.getElementById('server-ip').innerHTML = 'Access from other devices: http://' + d.ip + ':8080';
             }
         });
-        
+
+        // ===== File Upload =====
         document.getElementById('audioFile').onchange = function() {
             var file = this.files[0];
             var selected = document.getElementById('fileSelected');
