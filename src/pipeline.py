@@ -217,3 +217,41 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
     finally:
         if os.path.exists(chunk_dir):
             shutil.rmtree(chunk_dir)
+
+
+def process_text(text: str, transcript_format: str = 'raw') -> dict:
+    """Process text directly through the LLM pipeline (skip transcription).
+    
+    Takes raw transcript text and generates a meeting document via LLM.
+    Uses the same chunk-and-merge logic as the audio pipeline.
+    
+    Args:
+        text: Raw transcript text to analyze
+        transcript_format: 'raw' or 'formatted' (formatted not applicable for text)
+    
+    Returns:
+        dict with 'transcript' (input text), 'summary' (LLM output), etc.
+    """
+    _log(f"Processing text ({len(text)} chars)...")
+    log_message("Processing text...")
+
+    # Phase 4: LLM Analysis (skip transcription phases 1-3)
+    set_phase(4, 1)
+    log_message("Analyzing transcript...")
+    summary = process_full_transcript(text, model=DEFAULT_LLM_MODEL)
+    _log("Analysis complete!")
+    log_message("Analysis complete.")
+    update_chunk()
+
+    # Phase 5: Save
+    set_phase(5)
+    output_file = save_summary(text, summary, "summaries")
+    _log(f"Saved to {output_file}")
+
+    complete()
+    return {
+        "transcript": text,
+        "raw_transcript": text,
+        "summary": summary,
+        "output_file": output_file
+    }
