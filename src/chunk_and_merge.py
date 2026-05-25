@@ -10,7 +10,7 @@ from pathlib import Path
 
 # Default settings
 CHUNK_SIZE_TOKENS = 3500  # Further reduced for faster processing and more focused output
-DEFAULT_MODEL = "llama3.1:8b"  # Back to 8b for better instruction-following
+DEFAULT_MODEL = "llama3.2:3b"  # Lightweight 3b model for faster inference
 
 
 def count_tokens(text: str) -> int:
