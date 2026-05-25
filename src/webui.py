@@ -534,7 +534,6 @@ HTML_TEMPLATE = """
                     html += '</div></div>';
                 });
                 timeline.innerHTML = html;
-                // Auto-scroll to bottom
                 timeline.scrollTop = timeline.scrollHeight;
             }
         }
@@ -546,10 +545,10 @@ HTML_TEMPLATE = """
             document.getElementById('no-result').style.display = 'none';
             document.getElementById('result-card').style.display = 'block';
             
-            document.getElementById('summary-content').innerText = summary || 'No summary available';
+            document.getElementById('summary-content').innerText = summary || 'No summary available (transcribe-only mode)';
             document.getElementById('transcript-content').innerText = transcript || 'No transcript available';
 
-            // Show input panel again for new upload
+            // Reset input panel for next operation
             document.getElementById('input-panel').style.display = 'block';
             document.getElementById('audioFile').value = '';
             document.getElementById('fileSelected').style.display = 'none';
