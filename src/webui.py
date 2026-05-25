@@ -186,6 +186,20 @@ HTML_TEMPLATE = """
                         </div>
 
                         <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
+                            <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Mode:</label>
+                            <div style="display: flex; gap: 12px;">
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                    <input type="radio" name="uploadMode" value="full" checked>
+                                    Transcribe + Summarize
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                    <input type="radio" name="uploadMode" value="transcribe_only">
+                                    Transcribe Only
+                                </label>
+                            </div>
+                        </div>
+
+                        <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
                             <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Transcript Format:</label>
                             <div style="display: flex; gap: 12px;">
                                 <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
