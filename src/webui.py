@@ -612,20 +612,19 @@ def upload():
             try:
                 if stop_flag:
                     return
-                result = run_pipeline(temp_path, transcript_format=transcript_format, original_filename=original_filename)
+                result = run_pipeline(temp_path, transcript_format=transcript_format, original_filename=original_filename, mode=mode)
 
                 if not stop_flag:
-                    # Get the transcript/summary from result
-                    summary = result.get('summary', 'No summary')
+                    summary = result.get('summary', '') if mode != 'transcribe_only' else ''
                     transcript = result.get('transcript', 'No transcript')
 
-                    # Store result in a global for retrieval (simplified)
                     global _last_result
                     _last_result = {'summary': summary, 'transcript': transcript}
             except Exception as e:
                 global _last_error
                 _last_error = str(e)
             finally:
+                _end_processing()
                 try:
                     if temp_path and os.path.exists(temp_path):
                         os.remove(temp_path)
