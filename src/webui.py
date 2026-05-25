@@ -39,6 +39,25 @@ app.config['SECRET_KEY'] = 'whisper-local-secret'
 
 stop_flag = False
 
+# Single-operation lock — prevents concurrent processing
+_processing_busy = threading.Lock()
+
+def _start_processing() -> bool:
+    """Try to acquire the processing lock. Returns True if acquired."""
+    return _processing_busy.acquire(blocking=False)
+
+def _end_processing():
+    """Release the processing lock."""
+    try:
+        _processing_busy.release()
+    except (RuntimeError, ValueError):
+        pass
+
+# Manual recording state
+_is_recording = False
+_recording_stop_flag = False
+_recording_start_time = 0.0
+
 def get_local_ip():
     import socket
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
