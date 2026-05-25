@@ -151,14 +151,19 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
         if not full_transcript.strip():
             raise ValueError("No speech detected in the audio.")
 
-        # Phase 4: Chunk-and-Merge Meeting Record
-        set_phase(4, 1)
-        log_message("Analyzing transcript (chunked)...")
-        _log(f"Generating meeting record from {len(full_transcript)} chars of transcript...")
-        summary = process_full_transcript(full_transcript, model=DEFAULT_LLM_MODEL)
-        _log("Analysis complete!")
-        log_message("Analysis complete.")
-        update_chunk()
+        # Phase 4: LLM Analysis (skip for transcribe-only mode)
+        if mode == 'transcribe_only':
+            summary = ''
+            log_message("Transcribe-only mode — skipping LLM analysis.")
+            _log("Transcribe-only mode — skipping analysis.")
+        else:
+            set_phase(4, 1)
+            log_message("Analyzing transcript (chunked)...")
+            _log(f"Generating meeting record from {len(full_transcript)} chars of transcript...")
+            summary = process_full_transcript(full_transcript, model=DEFAULT_LLM_MODEL)
+            _log("Analysis complete!")
+            log_message("Analysis complete.")
+            update_chunk()
 
         # Phase 5: Save & Cache Result
         set_phase(5)
