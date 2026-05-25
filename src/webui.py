@@ -220,18 +220,62 @@ HTML_TEMPLATE = """
                     
                     <div id="record-card">
                         <p style="color: var(--text-muted); margin-bottom: 12px; font-size: 14px;">Or record directly from microphone</p>
-                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
-                            <label style="color: var(--text-muted); font-size: 14px;">Duration (sec):</label>
-                            <input type="number" id="duration" value="60" min="5" max="600">
+
+                        <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
+                            <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Mode:</label>
+                            <div style="display: flex; gap: 12px;">
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                    <input type="radio" name="recordMode" value="full" checked>
+                                    Transcribe + Summarize
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                    <input type="radio" name="recordMode" value="transcribe_only">
+                                    Transcribe Only
+                                </label>
+                            </div>
                         </div>
+
+                        <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
+                            <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Transcript Format:</label>
+                            <div style="display: flex; gap: 12px;">
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                    <input type="radio" name="recordFormat" value="raw" checked>
+                                    Raw (Plain Text)
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                    <input type="radio" name="recordFormat" value="formatted">
+                                    Formatted (Speaker Labels)
+                                </label>
+                            </div>
+                        </div>
+
                         <button class="btn-danger" style="width: 100%;" id="recordBtn">Start Recording</button>
-                        <p class="note">Note: Uses host computer's microphone</p>
+                        <p class="note">Click "Start Recording" to begin. Click "Stop Recording" to end.</p>
+
+                        <div style="border-top: 1px solid var(--border); margin: 20px 0;"></div>
+                        <h3 style="margin: 0 0 12px 0; font-size: 15px;">Or analyze a transcript text</h3>
+
+                        <div class="file-input-wrapper" style="margin-bottom: 12px;">
+                            <label for="textFile" class="file-label" id="textFileLabel" style="padding: 20px;">
+                                <span style="margin-bottom: 6px; font-size: 13px;">Upload a .txt file</span>
+                                <span class="btn-secondary" style="padding: 4px 10px; border-radius: 4px; font-size: 11px;">Choose File</span>
+                            </label>
+                            <input type="file" id="textFile" accept=".txt">
+                            <div class="file-selected" id="textFileSelected" style="display:none; font-size: 12px;"></div>
+                        </div>
+
+                        <div style="margin-bottom: 12px;">
+                            <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 4px;">Or paste transcript text:</label>
+                            <textarea id="textInput" style="width: 100%; min-height: 80px; max-height: 200px; padding: 8px; background: var(--bg-page); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px; font-family: inherit; font-size: 13px; resize: vertical; box-sizing: border-box;" placeholder="Paste your transcript here..."></textarea>
+                        </div>
+
+                        <button class="btn-primary" style="width: 100%;" id="analyzeTextBtn">Analyze Text</button>
                     </div>
                 </div>
 
                 <div class="panel" id="processing-card" style="display:none;">
                     <div class="processing">
-                        <div class="spinner"></div>
+                        <div class="spinner" id="processing-spinner"></div>
                         <div style="color: var(--accent-blue); font-weight: 500;" id="phase-name">Processing...</div>
                         
                         <div class="progress-container">
