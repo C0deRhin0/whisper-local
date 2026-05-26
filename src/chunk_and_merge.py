@@ -210,7 +210,9 @@ Meeting Record:"""
     try:
         response = requests.post(url, json=payload, timeout=600)
         response.raise_for_status()
-        return response.json().get("response", "")
+        result = response.json().get("response", "")
+        print(f"  Chunk {chunk_num}/{total_chunks} LLM response: {len(result)} chars")
+        return result
     except Exception as e:
         return f"Error processing chunk {chunk_num}: {str(e)}"
 
@@ -261,20 +263,32 @@ def process_full_transcript(transcript: str, model: str = DEFAULT_MODEL) -> str:
     """Main function: takes full transcript, returns complete meeting record."""
     print(f"Processing transcript ({count_tokens(transcript)} tokens)...")
     
+    from progress import log_message, is_cancelled
+    
+    if is_cancelled():
+        return ""
+    
     # Split into chunks
     chunks = split_into_chunks(transcript, CHUNK_SIZE_TOKENS)
     total = len(chunks)
     
     print(f"Split into {total} chunks for processing...")
+    log_message(f"LLM analysis: splitting transcript into {total} chunk(s)")
     
     # Process each chunk
     results = []
     for i, chunk in enumerate(chunks):
+        if is_cancelled():
+            return ""
+        log_message(f"LLM processing chunk {i+1}/{total}...")
         print(f"Processing chunk {i+1}/{total}...")
         result = process_chunk(chunk, i+1, total, model)
         results.append(result)
+        if is_cancelled():
+            return ""
     
     # Merge results
+    log_message("Merging LLM chunk outputs...")
     print("Merging all chunks...")
     final = merge_chunks(results)
     

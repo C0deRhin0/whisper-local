@@ -335,7 +335,7 @@ END OF TRANSCRIPT"""
 
     return output
 
-def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, file_name: str = "audio") -> str:
+def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, file_name: str = "audio", cache_dir: str = None) -> str:
     """
     Transcribe audio file using whisper.cpp CLI with caching and format conversion.
 
@@ -344,18 +344,23 @@ def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, f
         prompt: Optional prompt for context
         format_output: If True, return formatted output with speaker labels
         file_name: Name of the file for the formatted output header
+        cache_dir: If provided, save chunk cache inside this directory instead of global CACHE_DIR
 
     Returns:
         Transcribed text (raw or formatted based on format_output)
     """
     import time
+    from progress import is_cancelled, register_pid, unregister_pid
     start_time = time.time()
 
-    # 1. Check Cache
+    # 1. Check Cache — use cache_dir if provided, else global CACHE_DIR
     file_hash = _get_file_hash(audio_path)
-    # We include prompt in cache key to ensure context changes trigger re-transcription if needed
-    # (Or we can just hash the audio if the prompt is always the same)
-    cache_file = CACHE_DIR / f"{file_hash}.txt"
+    if cache_dir:
+        cache_path = pathlib.Path(cache_dir)
+        cache_path.mkdir(parents=True, exist_ok=True)
+        cache_file = cache_path / f"{file_hash}.txt"
+    else:
+        cache_file = CACHE_DIR / f"{file_hash}.txt"
 
     if cache_file.exists():
         print(f"[Transcribe] Cache hit for {audio_path} ({time.time() - start_time:.1f}s)")
@@ -364,6 +369,9 @@ def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, f
         if format_output:
             return format_transcript(raw_text, file_name=file_name)
         return raw_text
+
+    if is_cancelled():
+        return ""
 
     print(f"[Transcribe] Starting transcription for {audio_path}...")
 
@@ -379,6 +387,9 @@ def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, f
         converted_wav = tmp_wav.name
         
     try:
+        if is_cancelled():
+            return ""
+
         # Convert to 16kHz mono WAV using ffmpeg
         conv_cmd = [
             "ffmpeg", "-y", "-i", str(audio_path),
@@ -387,7 +398,10 @@ def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, f
         ]
         subprocess.run(conv_cmd, capture_output=True, check=True)
 
-        # 4. Transcription
+        if is_cancelled():
+            return ""
+
+        # 4. Transcription — use Popen so process can be killed on cancel
         with tempfile.NamedTemporaryFile(suffix='.txt', delete=False) as tmp_out:
             output_base = tmp_out.name[:-4]
             tmp_txt_name = tmp_out.name
@@ -410,11 +424,21 @@ def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, f
             if prompt:
                 cmd.extend(["--prompt", prompt])
 
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                error_msg = result.stderr or "Unknown error"
-                print(f"[Transcribe] Whisper error: {error_msg}")
-                raise RuntimeError(f"Whisper failed: {error_msg}")
+            # Launch subprocess and register for kill-on-cancel
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            register_pid(proc.pid)
+
+            try:
+                stdout, stderr = proc.communicate()
+                if is_cancelled():
+                    print(f"[Transcribe] Cancelled — aborting transcription of {audio_path}")
+                    return ""
+                if proc.returncode != 0:
+                    error_msg = stderr or "Unknown error"
+                    print(f"[Transcribe] Whisper error: {error_msg}")
+                    raise RuntimeError(f"Whisper failed: {error_msg}")
+            finally:
+                unregister_pid(proc.pid)
 
             output_file = output_base + ".txt"
             if os.path.exists(output_file):
@@ -424,10 +448,13 @@ def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, f
 
                 final_text = _clean_transcript(raw_text)
 
-                # 5. Save to Cache (always save raw text)
+                # 5. Save to Cache (always save raw text) — inside the provided cache_dir
                 cache_file.write_text(final_text, encoding='utf-8')
                 elapsed = time.time() - start_time
                 print(f"[Transcribe] Completed in {elapsed:.1f}s, text length: {len(final_text)} chars")
+
+                if is_cancelled():
+                    return ""
 
                 # Return formatted or raw based on option
                 if format_output:

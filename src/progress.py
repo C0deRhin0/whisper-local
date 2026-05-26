@@ -3,9 +3,14 @@ Progress callback system for pipeline.
 
 Allows the pipeline to report real-time progress to the web UI.
 Uses a simple, accurate progress calculation.
+
+Also provides cross-module cancel/shutdown signaling so any
+module can check if the user requested a stop and abort.
 """
 import threading
 import time
+import signal as _signal
+import os as _os
 
 # Global progress state
 _state = {
@@ -22,6 +27,9 @@ _state = {
     # Track separate counters for each phase type
     'transcribe_done': 0,
     'analyze_done': 0,
+    'cancelled': False,        # user requested stop
+    'active_pids': set(),      # subprocess PIDs to kill on cancel
+    'active_pids_lock': threading.Lock(),
 }
 
 PHASE_NAMES = {
@@ -65,11 +73,13 @@ def reset_progress():
         _state['steps'] = []
         _state['transcribe_done'] = 0
         _state['analyze_done'] = 0
+        _state['cancelled'] = False
 
 def start(total_chunks: int = 1, operation: str = 'upload'):
     """Start processing"""
     with _state['lock']:
         _state['active'] = True
+        _state['cancelled'] = False
         _state['total_chunks'] = max(1, total_chunks)
         _state['phase_num'] = 1
         _state['phase_done'] = 0
@@ -123,14 +133,17 @@ def update_chunk():
             _state['transcribe_done'] += 1
             current = _state['transcribe_done']
             start_pct, end_pct = PHASE_PROGRESS[3]
+            msg_prefix = "Transcribed chunk"
         elif phase == 4:
             _state['analyze_done'] += 1
             current = _state['analyze_done']
             start_pct, end_pct = PHASE_PROGRESS[4]
+            msg_prefix = "Analyzed chunk"
         else:
             _state['phase_done'] += 1
             current = _state['phase_done']
             start_pct, end_pct = PHASE_PROGRESS.get(phase, (15, 55))
+            msg_prefix = PHASE_NAMES.get(phase, 'Processing...')
         
         if total > 1:
             per_chunk = (end_pct - start_pct) / total
@@ -138,10 +151,11 @@ def update_chunk():
         else:
             _state['progress'] = end_pct
         
-        _state['message'] = PHASE_NAMES.get(phase, 'Processing...')
+        display_current = min(current, total)
         if total > 1:
-            display_current = min(current, total)
-            _state['message'] = f"{_state['message']} ({display_current}/{total})"
+            _state['message'] = f"{msg_prefix} {display_current}/{total}"
+        else:
+            _state['message'] = msg_prefix
         
         _state['steps'].append({
             'p': _state['progress'],
@@ -185,3 +199,47 @@ def is_active():
     """Check if in progress"""
     with _state['lock']:
         return _state['active']
+
+# ── Cross-module Cancel / Shutdown API ──────────────────────
+
+def cancel():
+    """Signal cancel — used by webui.py /stop endpoint."""
+    with _state['lock']:
+        _state['cancelled'] = True
+        _state['active'] = False
+    _kill_subprocesses()
+
+def is_cancelled() -> bool:
+    """Check whether a cancel was requested."""
+    with _state['lock']:
+        return _state['cancelled']
+
+def clear_cancel():
+    """Clear the cancel flag (e.g. at start of a new operation)."""
+    with _state['lock']:
+        _state['cancelled'] = False
+
+def register_pid(pid: int):
+    """Register a subprocess PID so it gets killed on cancel."""
+    with _state['active_pids_lock']:
+        _state['active_pids'].add(pid)
+
+def unregister_pid(pid: int):
+    """Remove a subprocess PID from the kill-list."""
+    with _state['active_pids_lock']:
+        _state['active_pids'].discard(pid)
+
+def _kill_subprocesses():
+    """Kill all tracked subprocesses (called on cancel)."""
+    with _state['active_pids_lock']:
+        pids = list(_state['active_pids'])
+        _state['active_pids'].clear()
+    for pid in pids:
+        try:
+            _os.kill(pid, _signal.SIGTERM)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+        try:
+            _os.kill(pid, _signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass

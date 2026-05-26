@@ -32,7 +32,7 @@ src_dir = os.path.dirname(os.path.abspath(__file__))
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
-from progress import get as get_progress, start, complete, reset_progress
+from progress import get as get_progress, start, complete, reset_progress, cancel as cancel_progress, is_cancelled, clear_cancel
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'whisper-local-secret'
@@ -171,106 +171,106 @@ HTML_TEMPLATE = """
         
         <main class="app-main">
             <div class="panel-left" style="display: flex; flex-direction: column; gap: 24px;">
-                <div class="panel" id="input-panel">
-                    <h2 style="margin: 0 0 16px 0; font-size: 18px;">Input Audio</h2>
+                <!-- ===== PANEL 1: Upload Audio ===== -->
+                <div class="panel" id="upload-panel">
+                    <h2 style="margin: 0 0 16px 0; font-size: 18px;">Upload Audio</h2>
 
-                    <div id="upload-card">
-                        <div class="file-input-wrapper">
-                            <label for="audioFile" class="file-label" id="fileLabel">
-                                <span style="margin-bottom: 8px;">Upload an audio file</span>
-                                <span class="btn-secondary" style="padding: 6px 12px; border-radius: 4px; font-size: 12px;">Choose File</span>
-                                <span style="font-size: 11px; opacity: 0.5; margin-top: 8px;">(WAV, MP3, M4A, AAC)</span>
-                            </label>
-                            <input type="file" id="audioFile" accept=".wav,.mp3,.m4a,.aac,.ogg">
-                            <div class="file-selected" id="fileSelected"></div>
-                        </div>
-
-                        <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
-                            <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Mode:</label>
-                            <div style="display: flex; gap: 12px;">
-                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
-                                    <input type="radio" name="uploadMode" value="full" checked>
-                                    Transcribe + Summarize
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
-                                    <input type="radio" name="uploadMode" value="transcribe_only">
-                                    Transcribe Only
-                                </label>
-                            </div>
-                        </div>
-
-                        <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
-                            <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Transcript Format:</label>
-                            <div style="display: flex; gap: 12px;">
-                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
-                                    <input type="radio" name="transcriptFormat" value="raw" checked>
-                                    Raw (Plain Text)
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
-                                    <input type="radio" name="transcriptFormat" value="formatted">
-                                    Formatted (Speaker Labels)
-                                </label>
-                            </div>
-                        </div>
-
-                        <button class="btn-primary" style="width: 100%; margin-bottom: 16px;" id="uploadBtn" disabled>Upload and Process</button>
+                    <div class="file-input-wrapper">
+                        <label for="audioFile" class="file-label" id="fileLabel">
+                            <span style="margin-bottom: 8px;">Upload an audio file</span>
+                            <span class="btn-secondary" style="padding: 6px 12px; border-radius: 4px; font-size: 12px;">Choose File</span>
+                            <span style="font-size: 11px; opacity: 0.5; margin-top: 8px;">(WAV, MP3, M4A, AAC)</span>
+                        </label>
+                        <input type="file" id="audioFile" accept=".wav,.mp3,.m4a,.aac,.ogg">
+                        <div class="file-selected" id="fileSelected"></div>
                     </div>
-                    
-                    <div style="border-top: 1px solid var(--border); margin: 16px 0;"></div>
-                    
-                    <div id="record-card">
-                        <p style="color: var(--text-muted); margin-bottom: 12px; font-size: 14px;">Or record directly from microphone</p>
 
-                        <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
-                            <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Mode:</label>
-                            <div style="display: flex; gap: 12px;">
-                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
-                                    <input type="radio" name="recordMode" value="full" checked>
-                                    Transcribe + Summarize
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
-                                    <input type="radio" name="recordMode" value="transcribe_only">
-                                    Transcribe Only
-                                </label>
-                            </div>
-                        </div>
-
-                        <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
-                            <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Transcript Format:</label>
-                            <div style="display: flex; gap: 12px;">
-                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
-                                    <input type="radio" name="recordFormat" value="raw" checked>
-                                    Raw (Plain Text)
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
-                                    <input type="radio" name="recordFormat" value="formatted">
-                                    Formatted (Speaker Labels)
-                                </label>
-                            </div>
-                        </div>
-
-                        <button class="btn-danger" style="width: 100%;" id="recordBtn">Start Recording</button>
-                        <p class="note">Click "Start Recording" to begin. Click "Stop Recording" to end.</p>
-
-                        <div style="border-top: 1px solid var(--border); margin: 20px 0;"></div>
-                        <h3 style="margin: 0 0 12px 0; font-size: 15px;">Or analyze a transcript text</h3>
-
-                        <div class="file-input-wrapper" style="margin-bottom: 12px;">
-                            <label for="textFile" class="file-label" id="textFileLabel" style="padding: 20px;">
-                                <span style="margin-bottom: 6px; font-size: 13px;">Upload a .txt file</span>
-                                <span class="btn-secondary" style="padding: 4px 10px; border-radius: 4px; font-size: 11px;">Choose File</span>
+                    <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
+                        <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Mode:</label>
+                        <div style="display: flex; gap: 12px;">
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                <input type="radio" name="uploadMode" value="full" checked>
+                                Transcribe + Summarize
                             </label>
-                            <input type="file" id="textFile" accept=".txt">
-                            <div class="file-selected" id="textFileSelected" style="display:none; font-size: 12px;"></div>
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                <input type="radio" name="uploadMode" value="transcribe_only">
+                                Transcribe Only
+                            </label>
                         </div>
-
-                        <div style="margin-bottom: 12px;">
-                            <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 4px;">Or paste transcript text:</label>
-                            <textarea id="textInput" style="width: 100%; min-height: 80px; max-height: 200px; padding: 8px; background: var(--bg-page); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px; font-family: inherit; font-size: 13px; resize: vertical; box-sizing: border-box;" placeholder="Paste your transcript here..."></textarea>
-                        </div>
-
-                        <button class="btn-primary" style="width: 100%;" id="analyzeTextBtn">Analyze Text</button>
                     </div>
+
+                    <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
+                        <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Transcript Format:</label>
+                        <div style="display: flex; gap: 12px;">
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                <input type="radio" name="transcriptFormat" value="raw" checked>
+                                Raw (Plain Text)
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                <input type="radio" name="transcriptFormat" value="formatted">
+                                Formatted (Speaker Labels)
+                            </label>
+                        </div>
+                    </div>
+
+                    <button class="btn-primary" style="width: 100%;" id="uploadBtn" disabled>Upload and Process</button>
+                </div>
+
+                <!-- ===== PANEL 2: Record Audio ===== -->
+                <div class="panel" id="record-panel">
+                    <h2 style="margin: 0 0 16px 0; font-size: 18px;">Record Audio</h2>
+
+                    <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
+                        <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Mode:</label>
+                        <div style="display: flex; gap: 12px;">
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                <input type="radio" name="recordMode" value="full" checked>
+                                Transcribe + Summarize
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                <input type="radio" name="recordMode" value="transcribe_only">
+                                Transcribe Only
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
+                        <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Transcript Format:</label>
+                        <div style="display: flex; gap: 12px;">
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                <input type="radio" name="recordFormat" value="raw" checked>
+                                Raw (Plain Text)
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                <input type="radio" name="recordFormat" value="formatted">
+                                Formatted (Speaker Labels)
+                            </label>
+                        </div>
+                    </div>
+
+                    <button class="btn-danger" style="width: 100%;" id="recordBtn">Start Recording</button>
+                    <p class="note">Click "Start Recording" to begin. Click "Stop Recording" to end.</p>
+                </div>
+
+                <!-- ===== PANEL 3: Analyze Transcript ===== -->
+                <div class="panel" id="text-panel">
+                    <h2 style="margin: 0 0 16px 0; font-size: 18px;">Analyze Transcript</h2>
+
+                    <div class="file-input-wrapper" style="margin-bottom: 12px;">
+                        <label for="textFile" class="file-label" id="textFileLabel" style="padding: 20px;">
+                            <span style="margin-bottom: 6px; font-size: 13px;">Upload a .txt file</span>
+                            <span class="btn-secondary" style="padding: 4px 10px; border-radius: 4px; font-size: 11px;">Choose File</span>
+                        </label>
+                        <input type="file" id="textFile" accept=".txt">
+                        <div class="file-selected" id="textFileSelected" style="display:none; font-size: 12px;"></div>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 4px;">Paste transcript text:</label>
+                        <textarea id="textInput" style="width: 100%; min-height: 80px; max-height: 200px; padding: 8px; background: var(--bg-page); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px; font-family: inherit; font-size: 13px; resize: vertical; box-sizing: border-box;" placeholder="Paste your transcript here..."></textarea>
+                    </div>
+
+                    <button class="btn-primary" style="width: 100%;" id="analyzeTextBtn">Analyze Text</button>
                 </div>
 
                 <div class="panel" id="processing-card" style="display:none;">
@@ -288,7 +288,7 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
                         
-                        <button class="btn-danger" style="width: 100%; display: none; margin: 16px 0;" id="stopRecordingBtn">■ Stop Recording</button>
+                        <button class="btn-danger" style="width: 100%; margin: 16px 0;" id="stopBtn">■ Stop</button>
                         
                         <div class="timeline" id="timeline">
                             <div class="timeline-title">Status</div>
@@ -398,11 +398,29 @@ HTML_TEMPLATE = """
             }).then(r=>r.json()).then(handleRecordResponse);
         };
 
-        document.getElementById('stopRecordingBtn').onclick = function() {
-            var btn = document.getElementById('stopRecordingBtn');
+        // ===== Stop / Cancel Button (works for all operations) =====
+        document.getElementById('stopBtn').onclick = function() {
+            var btn = document.getElementById('stopBtn');
+            var phaseEl = document.getElementById('phase-name');
+            var progressEl = document.getElementById('progress-percent');
             btn.disabled = true;
-            btn.innerText = 'Stopping...';
+            btn.innerText = '■ Stopping...';
+            phaseEl.innerText = 'Stopping...';
+            progressEl.innerText = '--';
+            // Send both stop signals — /stop kills all subprocesses
+            fetch('/stop', { method: 'POST' });
             fetch('/stop-recording', { method: 'POST' });
+            // Force-reset the UI after 3 seconds if server doesn't respond
+            setTimeout(function() {
+                if (document.getElementById('processing-card').style.display !== 'none') {
+                    fetch('/status').then(function(r) { return r.json(); }).then(function(d) {
+                        if (d.status === 'idle' || d.status === 'stopped' || !d.status) {
+                            showInputPanels();
+                            document.getElementById('processing-card').style.display = 'none';
+                        }
+                    });
+                }
+            }, 3000);
         };
 
         // ===== Text Analysis =====
@@ -455,31 +473,45 @@ HTML_TEMPLATE = """
             else { alert(d.message || 'Error'); location.reload(); }
         }
 
+        function hideInputPanels() {
+            document.getElementById('upload-panel').style.display = 'none';
+            document.getElementById('record-panel').style.display = 'none';
+            document.getElementById('text-panel').style.display = 'none';
+        }
+
+        function showInputPanels() {
+            document.getElementById('upload-panel').style.display = 'flex';
+            document.getElementById('record-panel').style.display = 'flex';
+            document.getElementById('text-panel').style.display = 'flex';
+        }
+
         // ===== UI State Functions =====
         function showProcessing() {
-            document.getElementById('input-panel').style.display = 'none';
+            hideInputPanels();
             document.getElementById('processing-card').style.display = 'flex';
             document.getElementById('error-card').style.display = 'none';
             document.getElementById('result-card').style.display = 'none';
             document.getElementById('no-result').style.display = 'flex';
             
-            document.getElementById('stopRecordingBtn').style.display = 'none';
+            document.getElementById('stopBtn').style.display = 'block';
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('stopBtn').innerText = '■ Stop';
             document.getElementById('progress-fill').style.width = '1%';
             document.getElementById('progress-percent').innerText = '1%';
             document.getElementById('phase-name').innerText = 'Starting...';
-            document.getElementById('timeline').innerHTML = '<div class="timeline-title">Status</div>';
+            document.getElementById('timeline').innerHTML = '<div class="timeline-title">Status</div><div class="timeline-item current"><div class="timeline-dot"></div><div>Starting up...</div></div>';
         }
 
         function showRecording() {
-            document.getElementById('input-panel').style.display = 'none';
+            hideInputPanels();
             document.getElementById('processing-card').style.display = 'flex';
             document.getElementById('error-card').style.display = 'none';
             document.getElementById('result-card').style.display = 'none';
             document.getElementById('no-result').style.display = 'flex';
             
-            document.getElementById('stopRecordingBtn').style.display = 'block';
-            document.getElementById('stopRecordingBtn').disabled = false;
-            document.getElementById('stopRecordingBtn').innerText = '■ Stop Recording';
+            document.getElementById('stopBtn').style.display = 'block';
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('stopBtn').innerText = '■ Stop Recording';
             document.getElementById('progress-fill').style.width = '5%';
             document.getElementById('progress-percent').innerText = 'Recording...';
             document.getElementById('phase-name').innerText = 'Recording...';
@@ -490,18 +522,18 @@ HTML_TEMPLATE = """
         
         function pollStatus() {
             fetch('/status').then(r=>r.json()).then(d=>{
-                if(d.status === 'recording') {
-                    // Show recording state with elapsed time
-                    document.getElementById('stopRecordingBtn').style.display = 'block';
+                if(d.status === 'idle') {
+                    clearInterval(pollInterval);
+                    showInputPanels();
+                    document.getElementById('processing-card').style.display = 'none';
+                } else if(d.status === 'recording') {
                     document.getElementById('progress-fill').style.width = '5%';
                     document.getElementById('progress-percent').innerText = Math.floor(d.elapsed) + 's';
                     document.getElementById('phase-name').innerText = 'Recording... (' + Math.floor(d.elapsed) + 's)';
                 } else if(d.status === 'processing') {
-                    document.getElementById('stopRecordingBtn').style.display = 'none';
                     updateProgress(d);
                 } else if(d.status === 'done') {
                     clearInterval(pollInterval);
-                    document.getElementById('stopRecordingBtn').style.display = 'none';
                     document.getElementById('processing-card').style.display = 'none';
                     showResult(d.summary, d.transcript);
                 } else if(d.status === 'error') {
@@ -548,8 +580,8 @@ HTML_TEMPLATE = """
             document.getElementById('summary-content').innerText = summary || 'No summary available (transcribe-only mode)';
             document.getElementById('transcript-content').innerText = transcript || 'No transcript available';
 
-            // Reset input panel for next operation
-            document.getElementById('input-panel').style.display = 'block';
+            // Reset input panels for next operation
+            showInputPanels();
             document.getElementById('audioFile').value = '';
             document.getElementById('fileSelected').style.display = 'none';
             document.getElementById('fileLabel').style.display = 'flex';
@@ -615,6 +647,14 @@ def get_ip():
 def status():
     global stop_flag, _last_result, _last_error, _is_recording, _recording_start_time
     
+    # Check for cancel first
+    if is_cancelled():
+        stop_flag = False
+        reset_progress()
+        _last_result = {'summary': '', 'transcript': ''}
+        _last_error = None
+        return jsonify({'status': 'idle'})
+    
     if stop_flag:
         stop_flag = False
         reset_progress()
@@ -642,43 +682,6 @@ def status():
     if _last_result.get('summary') or _last_result.get('transcript'):
         result = _last_result.copy()
         _last_result = {'summary': '', 'transcript': ''}
-        # Reset progress after returning result
-        reset_progress()
-        return jsonify({
-            'status': 'done',
-            'summary': result.get('summary', ''),
-            'transcript': result.get('transcript', ''),
-            'progress': 100,
-            'message': 'Complete!'
-        })
-    
-    # Get progress from the progress module
-    prog = get_progress()
-    
-    if prog['active']:
-        return jsonify({
-            'status': 'processing',
-            'progress': prog['progress'],
-            'message': prog['message'],
-            'phase_name': prog['phase_name'],
-            'current_chunk': prog['current_chunk'],
-            'total_chunks': prog['total_chunks'],
-            'steps': prog['steps']
-        })
-    
-    return jsonify({'status': 'idle'})
-    
-    # Check for error first
-    if _last_error:
-        error = _last_error
-        _last_error = None
-        return jsonify({'status': 'error', 'message': error})
-    
-    # Check for completed result
-    if _last_result.get('summary') or _last_result.get('transcript'):
-        result = _last_result.copy()
-        _last_result = {'summary': '', 'transcript': ''}
-        # Reset progress after returning result
         reset_progress()
         return jsonify({
             'status': 'done',
@@ -706,9 +709,15 @@ def status():
 
 @app.route('/stop', methods=['POST'])
 def stop():
-    global stop_flag
+    """Forcefully stop ALL operations — kills subprocesses, cancels everything."""
+    global stop_flag, _is_recording, _recording_stop_flag
     stop_flag = True
+    _recording_stop_flag = True
+    _is_recording = False
+    # Cancel progress + kill all tracked subprocesses
+    cancel_progress()
     reset_progress()
+    _end_processing()
     return jsonify({'status': 'stopped'})
 
 @app.route('/upload', methods=['POST'])
@@ -719,6 +728,7 @@ def upload():
         return jsonify({'status': 'error', 'message': 'Already processing an operation. Please wait for it to complete.'})
 
     stop_flag = False
+    clear_cancel()
 
     try:
         if 'audio' not in request.files:
@@ -787,6 +797,7 @@ def record():
 
     stop_flag = False
     _recording_stop_flag = False
+    clear_cancel()
 
     try:
         transcript_format = request.json.get('format', 'raw')
@@ -854,6 +865,8 @@ def analyze_text():
     if not _start_processing():
         return jsonify({'status': 'error', 'message': 'Already processing an operation. Please wait for it to complete.'})
 
+    clear_cancel()
+    
     try:
         text = ''
 

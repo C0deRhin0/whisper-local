@@ -2,7 +2,8 @@
 # Whisper Local Server Control Script
 # Usage: ./serverctl [start|stop|restart|status]
 
-set -e
+# Note: Intentionally NOT using set -e to allow graceful handling of
+# pgrep failures (no matching process = exit code 1)
 
 # Colors
 RED='\033[0;31m'
@@ -152,7 +153,7 @@ stop_webui() {
         rm -f "$PID_FILE"
     else
         # Find by process name
-        PID=$(pgrep -f "python3.*webui.py" | head -1)
+        PID=$(pgrep -f "webui\.py" | head -1)
         if [ -n "$PID" ]; then
             echo -e "${YELLOW}Stopping Web UI...${NC}"
             kill "$PID" 2>/dev/null || true
@@ -179,7 +180,7 @@ show_status() {
             echo -e "${RED}Web UI: Not running${NC} (stale PID file)"
         fi
     else
-        PID=$(pgrep -f "python3.*webui.py" | head -1)
+        PID=$(pgrep -f "webui\.py" | head -1)
         if [ -n "$PID" ]; then
             echo -e "${GREEN}Web UI: Running${NC} (PID: $PID)"
             RUNNING_WEBUI=true
