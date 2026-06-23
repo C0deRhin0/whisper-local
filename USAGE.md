@@ -157,6 +157,8 @@ The PDF button generates a styled document with:
 # Rebuild whisper.cpp
 ./serverctl build
 
-# Access from other devices
-# Use the IP shown in footer (e.g., http://192.168.x.x:8080)
+# Access from other devices only when explicitly enabled:
+# WHISPER_LOCAL_HOST=0.0.0.0 WHISPER_LOCAL_AUTH_TOKEN=choose-a-strong-token ./serverctl start
+# Then use the IP shown in server output (e.g., http://192.168.x.x:8080)
+# Enter WHISPER_LOCAL_AUTH_TOKEN in the browser prompt when asked.
 ```
