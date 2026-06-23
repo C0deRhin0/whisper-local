@@ -63,9 +63,9 @@ Speaker diarization requires a HuggingFace token for the pyannote models:
 
 1. Create an account at [huggingface.co](https://huggingface.co)
 2. Go to Settings → Access Tokens → Create new token
-3. Copy the token and update `src/transcriber.py` where it says `HF_TOKEN`
+3. Copy `.env.example` to `.env` and set `HF_TOKEN`, or export `HF_TOKEN` in your shell.
 
-The token is pre-configured in the code. On first run, it will automatically download the diarization model.
+On first run, the app will use `HF_TOKEN` to download the diarization model.
 
 ## Quick Start
 
@@ -235,17 +235,18 @@ whisper-local/
 ├── serverctl           # Server control script
 ├── run.sh             # Simple launcher
 ├── src/
-│   ├── app.py        # CLI entry point
-│   ├── webui.py      # Web UI (Flask)
-│   ├── pipeline.py    # Main processing pipeline
-│   ├── progress.py   # Progress tracking
-│   ├── recorder.py   # Microphone recording
-│   ├── transcriber.py # whisper.cpp wrapper + diarization
-│   ├── llm.py       # Ollama integration
-│   ├── audio_utils.py # Smart audio chunking
-│   ├── chunk_and_merge.py # LLM transcript processing
-│   ├── md_to_pdf.py # Markdown to styled PDF conversion
-│   └── storage.py    # Output persistence (legacy)
+│   ├── app.py          # Compatibility CLI entry point
+│   ├── webui.py        # Compatibility Web UI launcher
+│   └── whisper_local/
+│       ├── audio/      # Recording, chunking, transcription, diarization
+│       ├── core/       # Progress/cancellation state
+│       ├── export/     # Markdown-to-PDF conversion
+│       ├── integrations/ # Ollama integration
+│       ├── processing/ # Audio/text processing pipelines
+│       ├── web/        # Flask app and routes
+│       ├── cli.py      # CLI implementation
+│       ├── paths.py    # Repository-root path helpers
+│       └── storage.py  # Output persistence (legacy)
 ├── data/
 │   └── cache/        # SHA-256 result cache
 ├── summaries/         # Generated meeting notes (.md)
@@ -274,11 +275,11 @@ The system uses a **foldered caching** mechanism for easy cache management:
 ### Cache Structure
 ```
 data/cache/
-├── Talk1_PaloAlto.m4a/
+├── Talk1_PaloAlto.m4a_<sha256>/
 │   └── result.json    # Contains both raw + formatted transcripts
-├── sample.wav/
+├── sample.wav_<sha256>/
 │   └── result.json
-└── meeting_recording/
+└── 9f8e7d6c5b4a3210.../
     └── result.json
 ```
 
@@ -302,7 +303,7 @@ Each `result.json` contains:
 - **Timeline**: Real-time status updates with timestamps and status dots.
 - **PDF Download**: Export meeting records as professional PDFs with page numbers.
 - **Auto-Reset**: Input panel automatically returns to the upload state after completion.
-- **Mobile Access**: Responsive design accessible from your network URL.
+- **Mobile Access (opt-in)**: Bind to `0.0.0.0` with `WHISPER_LOCAL_AUTH_TOKEN` when you intentionally want network access.
 
 ## Server Control
 
@@ -347,15 +348,15 @@ The system uses a **full meeting reconstruction** prompt (not summarization):
 - Translates Tagalog/Bicolano to English
 - Handles edge cases (short clips, inaudible segments)
 
-See `src/llm.py` for the complete prompt.
+See `src/whisper_local/integrations/llm.py` for the complete prompt.
 
 ## Models
 
 ### Whisper (Transcription)
-Standardized on `small` (Metal-optimized) for the best balance of speed and accuracy. Use `medium` for complex dialectal audio if hardware allows.
+Standardized on `small` (Metal-optimized) for the best balance of speed and accuracy. Use `medium` for complex dialectal audio if hardware allows, and update `src/whisper_local/audio/transcriber.py` to point to the matching downloaded model.
 
 ### Ollama (LLM)
-Optimized for `llama3.2:3b`. Higher parameter models (7b, 8b) can be swapped in `src/pipeline.py`.
+Optimized for `llama3.2:3b`. Higher parameter models (7b, 8b) can be swapped in `src/whisper_local/processing/pipeline.py`.
 
 ### Speaker Diarization
 Uses `pyannote/speaker-diarization-3.1` (or 2.0 as fallback) from HuggingFace.
@@ -369,7 +370,7 @@ Uses `pyannote/speaker-diarization-3.1` (or 2.0 as fallback) from HuggingFace.
 | `whisper-cli` missing | Run `./serverctl build` |
 | PDF generation fails | Run `brew install pango` |
 | Ollama connection error | Run `./serverctl start` (starts Ollama) |
-| Diarization fails | Check HuggingFace token is valid in `src/transcriber.py` |
+| Diarization fails | Check that `HF_TOKEN` is set in your shell or local `.env` file |
 
 ## Tech Stack
 
