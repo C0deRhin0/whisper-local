@@ -47,13 +47,19 @@ Use `serverctl` to manage the entire service:
 
 ## Network Access
 
-Access from other devices on your network:
+For safety, the Web UI binds to localhost by default. To access it from other devices on your network, opt in explicitly:
+
+```bash
+WHISPER_LOCAL_HOST=0.0.0.0 WHISPER_LOCAL_AUTH_TOKEN=choose-a-strong-token ./serverctl start
+```
+
+Then open:
 
 ```
 http://[YOUR_IP]:8080
 ```
 
-To find your IP, check the footer on the web page after starting.
+Enter `WHISPER_LOCAL_AUTH_TOKEN` in the browser prompt when asked. To find your IP, check the server output after starting in LAN mode.
 
 **Note:** Recording uses the host computer's microphone.
 
@@ -72,7 +78,7 @@ To find your IP, check the footer on the web page after starting.
 - Auto-cleanup of temp files after processing
 - Page refresh cancels and resets state
 - Works offline (100% local)
-- Access from phone/tablet on same network
+- Access from phone/tablet on same network when LAN mode is explicitly enabled
 - Beautiful glassmorphism UI
 
 ## Download Options
@@ -183,9 +189,10 @@ The system generates a **full meeting reconstruction** (not a summary):
 
 ## Files
 
-- `src/webui.py` - Flask web server
-- `src/progress.py` - Progress tracking system
-- `src/pipeline.py` - Audio processing pipeline
-- `src/llm.py` - Ollama integration (meeting record prompt)
-- `src/md_to_pdf.py` - Markdown to PDF conversion
+- `src/webui.py` - compatibility Web UI launcher
+- `src/whisper_local/web/app.py` - Flask web server
+- `src/whisper_local/core/progress.py` - Progress tracking system
+- `src/whisper_local/processing/pipeline.py` - Audio processing pipeline
+- `src/whisper_local/integrations/llm.py` - Ollama integration (meeting record prompt)
+- `src/whisper_local/export/pdf.py` - Markdown to PDF conversion
 - `serverctl` - Server control script
