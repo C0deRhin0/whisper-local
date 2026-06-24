@@ -3,17 +3,25 @@
 # Usage: ./run.sh [port]
 
 PORT=${1:-8080}
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$PROJECT_DIR"
+
+VENV_DIR="$PROJECT_DIR/.venv"
+if [ ! -d "$VENV_DIR" ] && [ -d "$PROJECT_DIR/../.venv" ]; then
+    VENV_DIR="$PROJECT_DIR/../.venv"
+fi
 
 echo "🎙️ Starting Whisper Local..."
 
 # Check if venv exists
-if [ ! -d ".venv" ]; then
+if [ ! -d "$VENV_DIR" ]; then
     echo "Creating virtual environment..."
-    python3 -m venv .venv
+    VENV_DIR="$PROJECT_DIR/.venv"
+    python3 -m venv "$VENV_DIR"
 fi
 
 # Activate venv
-source .venv/bin/activate
+source "$VENV_DIR/bin/activate"
 
 # Install dependencies if needed
 pip install -q flask
