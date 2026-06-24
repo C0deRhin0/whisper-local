@@ -14,6 +14,10 @@ NC='\033[0m' # No Color
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR"
+VENV_DIR="$PROJECT_DIR/.venv"
+if [ ! -d "$VENV_DIR" ] && [ -d "$PROJECT_DIR/../.venv" ]; then
+    VENV_DIR="$PROJECT_DIR/../.venv"
+fi
 
 # Files
 PID_FILE="/tmp/whisper_webui.pid"
@@ -114,7 +118,12 @@ start_webui() {
     echo -e "${YELLOW}Starting Whisper Local Web UI...${NC}"
     
     # Start server
-    source "$PROJECT_DIR/.venv/bin/activate"
+    if [ ! -d "$VENV_DIR" ]; then
+        echo -e "${RED}Virtual environment not found at $PROJECT_DIR/.venv${NC}"
+        echo -e "${YELLOW}Create it with: python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt${NC}"
+        exit 1
+    fi
+    source "$VENV_DIR/bin/activate"
     nohup python3 "$PROJECT_DIR/src/webui.py" > "$LOG_FILE" 2>&1 &
     WEBUI_PID=$!
     
@@ -127,10 +136,15 @@ start_webui() {
         echo -e "${BLUE}Open in browser:${NC}"
         echo -e "  http://localhost:8080"
         
-        # Try to get local IP
-        local_ip=$(curl -s http://localhost:8080/ip 2>/dev/null | grep -o '"ip":"[^"]*' | cut -d'"' -f4)
-        if [ -n "$local_ip" ] && [ "$local_ip" != "127.0.0.1" ]; then
-            echo -e "  http://$local_ip:8080"
+        # Show LAN URL only when explicitly enabled.
+        if [ "${WHISPER_LOCAL_HOST:-127.0.0.1}" = "0.0.0.0" ] || [ "${WHISPER_LOCAL_HOST:-127.0.0.1}" = "::" ]; then
+            local_ip=$(curl -s -H "X-Whisper-Auth: $WHISPER_LOCAL_AUTH_TOKEN" http://localhost:8080/ip 2>/dev/null | grep -o '"ip":"[^"]*' | cut -d'"' -f4)
+            if [ -n "$local_ip" ] && [ "$local_ip" != "127.0.0.1" ]; then
+                echo -e "  http://$local_ip:8080"
+                echo -e "  ${YELLOW}Enter WHISPER_LOCAL_AUTH_TOKEN in the browser prompt.${NC}"
+            fi
+        else
+            echo -e "  ${YELLOW}LAN access disabled. Set WHISPER_LOCAL_HOST=0.0.0.0 to opt in.${NC}"
         fi
     else
         echo -e "${RED}Failed to start Web UI${NC}"
@@ -206,9 +220,14 @@ show_status() {
         echo ""
         echo -e "${BLUE} URLs:${NC}"
         echo -e "  http://localhost:8080"
-        local_ip=$(curl -s http://localhost:8080/ip 2>/dev/null | grep -o '"ip":"[^"]*' | cut -d'"' -f4)
-        if [ -n "$local_ip" ] && [ "$local_ip" != "127.0.0.1" ]; then
-            echo -e "  http://$local_ip:8080"
+        if [ "${WHISPER_LOCAL_HOST:-127.0.0.1}" = "0.0.0.0" ] || [ "${WHISPER_LOCAL_HOST:-127.0.0.1}" = "::" ]; then
+            local_ip=$(curl -s -H "X-Whisper-Auth: $WHISPER_LOCAL_AUTH_TOKEN" http://localhost:8080/ip 2>/dev/null | grep -o '"ip":"[^"]*' | cut -d'"' -f4)
+            if [ -n "$local_ip" ] && [ "$local_ip" != "127.0.0.1" ]; then
+                echo -e "  http://$local_ip:8080"
+                echo -e "  ${YELLOW}Enter WHISPER_LOCAL_AUTH_TOKEN in the browser prompt.${NC}"
+            fi
+        else
+            echo -e "  ${YELLOW}LAN access disabled. Set WHISPER_LOCAL_HOST=0.0.0.0 to opt in.${NC}"
         fi
     fi
     
