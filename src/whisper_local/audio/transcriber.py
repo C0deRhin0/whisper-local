@@ -6,20 +6,63 @@ import tempfile
 import shutil
 import hashlib
 
-# Load .env file if it exists
-env_file = pathlib.Path(__file__).parent.parent / ".env"
-if env_file.exists():
-    for line in env_file.read_text().strip().split('\n'):
-        if '=' in line and not line.startswith('#'):
-            key, val = line.split('=', 1)
-            os.environ.setdefault(key.strip(), val.strip())
+from whisper_local.paths import CACHE_DIR, PROJECT_ROOT, load_env_file
+
+
+load_env_file()
 
 # Base directory
-BASE_DIR = pathlib.Path(__file__).parent.parent
-CACHE_DIR = BASE_DIR / "data" / "cache"
+BASE_DIR = PROJECT_ROOT
 
 # Ensure cache directory exists
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _resolve_model_path() -> pathlib.Path:
+    """Resolve the whisper.cpp model without forcing a fresh download."""
+
+    configured_path = os.environ.get("WHISPER_MODEL_PATH")
+    if configured_path:
+        path = pathlib.Path(configured_path).expanduser()
+        return path if path.is_absolute() else BASE_DIR / path
+
+    model_dir = BASE_DIR / "whisper.cpp" / "models"
+    configured_name = os.environ.get("WHISPER_MODEL_NAME")
+    candidate_names = []
+    if configured_name:
+        candidate_names.append(configured_name if configured_name.startswith("ggml-") else f"ggml-{configured_name}.bin")
+
+    # Keep the documented small model as the first choice, but preserve existing
+    # local setups that already have medium/base downloaded from pre-migration use.
+    candidate_names.extend(["ggml-small.bin", "ggml-medium.bin", "ggml-base.bin"])
+
+    for name in candidate_names:
+        candidate = model_dir / name
+        if candidate.exists():
+            return candidate
+
+    return model_dir / candidate_names[0]
+
+
+def _whisper_runtime_env() -> dict:
+    """Build an environment that lets relocated whisper.cpp binaries find dylibs."""
+
+    env = os.environ.copy()
+    build_dir = BASE_DIR / "whisper.cpp" / "build"
+    library_dirs = [
+        build_dir / "src",
+        build_dir / "ggml" / "src",
+        build_dir / "ggml" / "src" / "ggml-blas",
+        build_dir / "ggml" / "src" / "ggml-cpu",
+        build_dir / "ggml" / "src" / "ggml-metal",
+    ]
+    existing_library_dirs = [str(path) for path in library_dirs if path.exists()]
+
+    if existing_library_dirs:
+        existing = env.get("DYLD_LIBRARY_PATH")
+        env["DYLD_LIBRARY_PATH"] = ":".join(existing_library_dirs + ([existing] if existing else []))
+
+    return env
 
 def _get_file_hash(file_path: str) -> str:
     """Generate SHA-256 hash of a file."""
@@ -350,7 +393,7 @@ def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, f
         Transcribed text (raw or formatted based on format_output)
     """
     import time
-    from progress import is_cancelled, register_pid, unregister_pid
+    from whisper_local.core.progress import is_cancelled, register_pid, unregister_pid
     start_time = time.time()
 
     # 1. Check Cache — use cache_dir if provided, else global CACHE_DIR
@@ -376,11 +419,13 @@ def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, f
     print(f"[Transcribe] Starting transcription for {audio_path}...")
 
     # 2. Prepare Paths
-    model_path = BASE_DIR / "whisper.cpp" / "models" / "ggml-medium.bin"
+    model_path = _resolve_model_path()
     whisper_bin = BASE_DIR / "whisper.cpp" / "build" / "bin" / "whisper-cli"
     
     if not whisper_bin.exists():
         raise FileNotFoundError(f"whisper-cli binary not found at {whisper_bin}")
+    if not model_path.exists():
+        raise FileNotFoundError(f"Whisper model not found at {model_path}")
 
     # 3. Audio Conversion (Ensure 16kHz WAV for whisper.cpp)
     with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_wav:
@@ -425,7 +470,13 @@ def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, f
                 cmd.extend(["--prompt", prompt])
 
             # Launch subprocess and register for kill-on-cancel
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=_whisper_runtime_env(),
+            )
             register_pid(proc.pid)
 
             try:
