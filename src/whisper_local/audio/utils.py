@@ -36,7 +36,8 @@ def _ensure_wav(audio_path: str) -> str:
     if not shutil.which('ffmpeg'):
         raise RuntimeError("ffmpeg required. Install: brew install ffmpeg")
     
-    wav_path = tempfile.mktemp(suffix='.wav')
+    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_wav:
+        wav_path = temp_wav.name
     result = subprocess.run([
         'ffmpeg', '-y', '-i', str(path.absolute()),
         '-ar', '16000', '-ac', '1', wav_path
