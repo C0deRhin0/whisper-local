@@ -133,17 +133,20 @@ def update_chunk():
             _state['transcribe_done'] += 1
             current = _state['transcribe_done']
             start_pct, end_pct = PHASE_PROGRESS[3]
-            msg_prefix = "Transcribed chunk"
+            msg_prefix = "Transcribed"
+            msg_suffix = "chunks"
         elif phase == 4:
             _state['analyze_done'] += 1
             current = _state['analyze_done']
             start_pct, end_pct = PHASE_PROGRESS[4]
-            msg_prefix = "Analyzed chunk"
+            msg_prefix = "Analyzed"
+            msg_suffix = "chunks"
         else:
             _state['phase_done'] += 1
             current = _state['phase_done']
             start_pct, end_pct = PHASE_PROGRESS.get(phase, (15, 55))
             msg_prefix = PHASE_NAMES.get(phase, 'Processing...')
+            msg_suffix = "items"
         
         if total > 1:
             per_chunk = (end_pct - start_pct) / total
@@ -153,7 +156,7 @@ def update_chunk():
         
         display_current = min(current, total)
         if total > 1:
-            _state['message'] = f"{msg_prefix} {display_current}/{total}"
+            _state['message'] = f"{msg_prefix} {display_current}/{total} {msg_suffix}"
         else:
             _state['message'] = msg_prefix
         
