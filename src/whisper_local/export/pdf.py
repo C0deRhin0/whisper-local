@@ -10,6 +10,7 @@ Dependencies:
 
 import sys
 import os
+import html
 from pathlib import Path
 import markdown
 from weasyprint import HTML, CSS
@@ -155,10 +156,12 @@ h2, h3 {
 def convert(md_text: str, out_path: Path, base_path: Path = None) -> None:
     """Convert markdown text to a styled PDF."""
 
+    safe_md_text = html.escape(md_text)
+
     # Convert Markdown → HTML
     # 'extra' enables tables, fenced code blocks, definition lists, etc.
     html_body = markdown.markdown(
-        md_text,
+        safe_md_text,
         extensions=["extra", "sane_lists"],
     )
 
@@ -178,12 +181,18 @@ def convert(md_text: str, out_path: Path, base_path: Path = None) -> None:
     base_url = str(base_path.parent) if base_path else str(Path.cwd())
 
     # Render to PDF via WeasyPrint
-    HTML(string=full_html, base_url=base_url).write_pdf(
+    HTML(string=full_html, base_url=base_url, url_fetcher=_blocked_url_fetcher).write_pdf(
         str(out_path),
         stylesheets=[CSS(string=STYLESHEET)],
     )
 
     print(f"PDF saved → {out_path}")
+
+
+def _blocked_url_fetcher(url: str, *args, **kwargs):
+    """Block WeasyPrint from fetching local or remote resources."""
+
+    raise ValueError(f"External PDF resource fetch blocked: {url}")
 
 
 def convert_from_file(md_path: Path, out_path: Path = None) -> Path:
