@@ -5,7 +5,6 @@ Processes long transcripts by splitting into chunks, running each through the LL
 then merging all outputs into one cohesive document.
 """
 
-import requests
 from pathlib import Path
 
 # Default settings
@@ -43,6 +42,8 @@ def split_into_chunks(text: str, chunk_size: int = CHUNK_SIZE_TOKENS) -> list:
 
 def process_chunk(chunk_text: str, chunk_num: int, total_chunks: int, model: str = DEFAULT_MODEL) -> str:
     """Process a single chunk through the LLM - uses original meeting documentation prompt."""
+    import requests
+
     url = "http://localhost:11434/api/generate"
     
     # Calculate word count for minimum output requirement
@@ -263,7 +264,7 @@ def process_full_transcript(transcript: str, model: str = DEFAULT_MODEL) -> str:
     """Main function: takes full transcript, returns complete meeting record."""
     print(f"Processing transcript ({count_tokens(transcript)} tokens)...")
     
-    from progress import log_message, is_cancelled
+    from whisper_local.core.progress import is_cancelled, log_message
     
     if is_cancelled():
         return ""
