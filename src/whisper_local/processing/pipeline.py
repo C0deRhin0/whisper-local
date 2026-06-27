@@ -1,23 +1,87 @@
 import os
+import pathlib
 import tempfile
 import shutil
-import pathlib
 import concurrent.futures
 import json
 
 # Internal imports
-from audio_utils import split_audio, save_summary
-from transcriber import transcribe, _get_file_hash
-from chunk_and_merge import process_full_transcript
-from progress import set_phase, update_chunk, complete, reset_progress, log_message, is_cancelled
+from whisper_local.audio.transcriber import _get_file_hash, format_transcript, transcribe
+from whisper_local.audio.utils import save_summary, split_audio
+from whisper_local.core.progress import complete, is_cancelled, log_message, reset_progress, set_phase, update_chunk
+from whisper_local.paths import CACHE_DIR, PROJECT_ROOT, SUMMARIES_DIR
+from whisper_local.processing.chunk_and_merge import process_full_transcript
 
 # Settings
 CHUNK_DURATION_SECONDS = 180 
-BASE_DIR = pathlib.Path(__file__).parent.parent
+BASE_DIR = PROJECT_ROOT
 DEFAULT_LLM_MODEL = "llama3.2:3b"  # Lightweight 3b model for faster inference
 
 def _log(msg: str):
     print(f"[Pipeline] {msg}")
+
+
+def _safe_filename(name: str | None, fallback: str) -> str:
+    """Return a filesystem-safe filename segment with no path traversal."""
+
+    base_name = os.path.basename(name or "")
+    safe_name = "".join(c for c in base_name if c.isalnum() or c in (".", "-", "_"))
+    safe_name = safe_name.strip(" ._")
+
+    if not safe_name or safe_name in {".", ".."}:
+        return fallback
+
+    return safe_name[:160]
+
+
+def _safe_cache_folder(name: str | None, fallback: str) -> pathlib.Path:
+    cache_root = CACHE_DIR
+    safe_name = _safe_filename(name, fallback)
+    cache_folder = cache_root / safe_name
+    cache_root_resolved = cache_root.resolve()
+    cache_folder_resolved = cache_folder.resolve()
+
+    if cache_root_resolved != cache_folder_resolved and cache_root_resolved not in cache_folder_resolved.parents:
+        raise ValueError("Resolved cache path escapes cache directory")
+
+    return cache_folder
+
+
+def _legacy_cache_name_candidates(original_filename: str | None) -> list[str]:
+    """Return pre-rearchitecture folder names for backwards-compatible cache reads."""
+
+    if not original_filename:
+        return []
+
+    base_name = os.path.basename(original_filename)
+    safe_name = _safe_filename(base_name, "")
+
+    candidates = []
+    for candidate in [
+        # Old pipeline kept alnum, dot, dash, and underscore from the original
+        # filename, dropping spaces and other punctuation.
+        "".join(c for c in base_name if c.isalnum() or c in (".", "-", "_")),
+        safe_name,
+        # Some existing operator caches were created from display names where
+        # spaces became underscores and were then omitted.
+        safe_name.replace("_", ""),
+    ]:
+        candidate = candidate.strip(" ._")
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+
+    return candidates
+
+
+def _find_legacy_cache_folder(original_filename: str | None) -> pathlib.Path | None:
+    """Find an existing legacy cache folder that can satisfy a cache read."""
+
+    for candidate in _legacy_cache_name_candidates(original_filename):
+        folder = _safe_cache_folder(candidate, "")
+        if (folder / "result.json").exists() and (folder / "transcript.txt").exists():
+            return folder
+
+    return None
 
 def run_pipeline(audio_path: str = None, duration: int = 60, chunk_duration: int = CHUNK_DURATION_SECONDS, transcript_format: str = 'raw', original_filename: str = None, mode: str = 'full') -> dict:
     """Run the transcription and analysis pipeline.
@@ -37,9 +101,9 @@ def run_pipeline(audio_path: str = None, duration: int = 60, chunk_duration: int
 
     try:
         if not audio_path:
-            audio_path = os.path.join(tempfile.gettempdir(), "temp_recording.wav")
-            from recorder import record_audio
-            start_record = True
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
+                audio_path = temp_audio.name
+            from whisper_local.audio.recorder import record_audio
             _log(f"Recording audio for {duration} seconds...")
             record_audio(audio_path, duration=duration)
             temp_file = True
@@ -57,13 +121,21 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
     Args:
         mode: 'full' (transcribe + summarize) or 'transcribe_only'
     """
-    # Use original filename for foldered cache, or fallback to hash-based name
+    # Use a content hash in every cache key so two uploads with the same name do
+    # not accidentally share transcripts/summaries.
+    file_hash = _get_file_hash(audio_path)
+    legacy_cache = False
+    legacy_cache_folder = None
     if original_filename:
-        safe_name = "".join(c for c in original_filename if c.isalnum() or c in ('.', '-', '_'))
-        cache_folder = BASE_DIR / "data" / "cache" / safe_name
+        safe_original_name = _safe_filename(original_filename, "audio")[:80]
+        cache_folder = _safe_cache_folder(f"{safe_original_name}_{file_hash}", file_hash)
+        legacy_cache_folder = _find_legacy_cache_folder(original_filename)
     else:
-        file_hash = _get_file_hash(audio_path)
-        cache_folder = BASE_DIR / "data" / "cache" / file_hash
+        cache_folder = _safe_cache_folder(file_hash, file_hash)
+
+    if legacy_cache_folder and not ((cache_folder / "result.json").exists() and (cache_folder / "transcript.txt").exists()):
+        cache_folder = legacy_cache_folder
+        legacy_cache = True
 
     cache_folder.mkdir(parents=True, exist_ok=True)
     cache_path = cache_folder / "result.json"
@@ -73,12 +145,18 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
     # Check if FULL cache exists (json + all transcript files)
     cache_valid = cache_path.exists() and transcript_path.exists()
     if cache_valid:
+        cache_kind = "legacy cache" if legacy_cache else "cache"
         _log(f"CACHE HIT: Loading existing results from {cache_folder.name}/")
-        log_message(f"Cache hit — loading cached results from {cache_folder.name}/")
+        log_message(f"{cache_kind.capitalize()} hit — loading cached results from {cache_folder.name}/")
         with open(cache_path, 'r') as f:
             cached_data = json.load(f)
 
-        if transcript_format == 'formatted' and not formatted_transcript_path.exists():
+        cached_hash = cached_data.get('source_hash')
+        if cached_hash is not None and cached_hash != file_hash:
+            cache_valid = False
+        elif cached_hash is None and not legacy_cache:
+            cache_valid = False
+        elif transcript_format == 'formatted' and not formatted_transcript_path.exists():
             cache_valid = False
         else:
             if transcript_format == 'formatted':
@@ -95,7 +173,7 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
                     "summary": cached_data.get('summary', ''),
                     "output_file": cached_data.get('output_file', '')
                 }
-    else:
+    if not cache_valid:
         _log(f"Cache miss in {cache_folder.name}/ — will re-process.")
         log_message(f"Processing audio: {cache_folder.name}")
         for stale in [cache_path, transcript_path, formatted_transcript_path]:
@@ -211,15 +289,19 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
         log_message("Saving results to cache folder...")
         _log("Saving results...")
 
-        original_file_name = original_filename if original_filename else (os.path.basename(audio_path) if audio_path else "audio")
-
-        from transcriber import format_transcript
-        formatted_transcript = format_transcript(
-            full_transcript,
-            file_name=original_file_name,
-            language=None,
-            audio_path=audio_path
+        original_file_name = _safe_filename(
+            original_filename if original_filename else (os.path.basename(audio_path) if audio_path else "audio"),
+            "audio",
         )
+
+        formatted_transcript = ""
+        if transcript_format == 'formatted':
+            formatted_transcript = format_transcript(
+                full_transcript,
+                file_name=original_file_name,
+                language=None,
+                audio_path=audio_path
+            )
 
         # Save summary markdown INSIDE the cache folder
         summary_filename = f"summary_{original_file_name}.md" if original_file_name else "summary.md"
@@ -240,12 +322,13 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
 
         # Also save to summaries/ for backward compatibility
         try:
-            save_summary(full_transcript, summary, "summaries")
+            save_summary(full_transcript, summary, str(SUMMARIES_DIR))
         except Exception:
             pass
 
         # Store BOTH formats in cache
         cached_data = {
+            "source_hash": file_hash,
             "raw_transcript": full_transcript,
             "formatted_transcript": formatted_transcript,
             "summary": summary,
@@ -256,8 +339,9 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
             json.dump(cached_data, f)
         with open(transcript_path, 'w') as f:
             f.write(full_transcript)
-        with open(formatted_transcript_path, 'w') as f:
-            f.write(formatted_transcript)
+        if transcript_format == 'formatted':
+            with open(formatted_transcript_path, 'w') as f:
+                f.write(formatted_transcript)
 
         _log(f"Cached all files in {cache_folder.name}/")
 
@@ -288,7 +372,7 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
 def _get_text_hash(text: str) -> str:
     """Generate a cache-friendly hash from text content."""
     import hashlib
-    return hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
 
 def process_text(text: str, transcript_format: str = 'raw') -> dict:
@@ -314,17 +398,20 @@ def process_text(text: str, transcript_format: str = 'raw') -> dict:
 
     # Check text cache
     text_hash = _get_text_hash(text)
-    cache_folder = BASE_DIR / "data" / "cache" / f"text_{text_hash}"
+    cache_folder = CACHE_DIR / f"text_{text_hash}"
     cache_folder.mkdir(parents=True, exist_ok=True)
     cache_path = cache_folder / "result.json"
 
     if cache_path.exists():
         _log(f"TEXT CACHE HIT: Loading from text_{text_hash}/")
-        log_message("Text cache hit — loading cached analysis.")
         with open(cache_path, 'r') as f:
             cached = json.load(f)
-        complete()
-        return cached
+        if cached.get('source_hash') == text_hash and cached.get('source_length') == len(text):
+            log_message("Text cache hit — loading cached analysis.")
+            complete()
+            return cached
+
+        _log("Text cache hash mismatch — reprocessing.")
 
     log_message("No text cache — running LLM analysis...")
 
@@ -354,13 +441,15 @@ def process_text(text: str, transcript_format: str = 'raw') -> dict:
     # Also save to summaries/ for backward compatibility
     output_file = str(summary_path)
     try:
-        save_summary(text, summary, "summaries")
+        save_summary(text, summary, str(SUMMARIES_DIR))
     except Exception:
         pass
 
     _log(f"Saved to {output_file}")
 
     result = {
+        "source_hash": text_hash,
+        "source_length": len(text),
         "transcript": text,
         "raw_transcript": text,
         "summary": summary,
