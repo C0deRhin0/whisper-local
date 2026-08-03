@@ -126,8 +126,11 @@ def split_audio_smart(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Convert to WAV
+    # Convert to WAV once for splitting. The temporary conversion is removed
+    # below; individual transcription workers can consume the resulting chunks
+    # directly without converting them again.
     wav_path = _ensure_wav(str(audio_path))
+    temporary_wav = audio_path.suffix.lower() != '.wav'
     
     # Get audio properties
     with wave.open(wav_path, 'rb') as wf:
@@ -231,6 +234,12 @@ def split_audio_smart(
         if result.returncode == 0 and chunk_path.exists():
             chunk_paths.append(str(chunk_path))
     
+    if temporary_wav:
+        try:
+            os.remove(wav_path)
+        except OSError:
+            pass
+
     return chunk_paths
 
 
