@@ -378,7 +378,17 @@ END OF TRANSCRIPT"""
 
     return output
 
-def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, file_name: str = "audio", cache_dir: str = None) -> str:
+def _is_whisper_ready_wav(path: str) -> bool:
+    """Return whether a WAV can go directly to whisper.cpp without ffmpeg."""
+    try:
+        import wave
+        with wave.open(path, "rb") as wav:
+            return wav.getframerate() == 16000 and wav.getnchannels() == 1 and wav.getsampwidth() == 2
+    except (OSError, EOFError, wave.Error):
+        return False
+
+
+def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, file_name: str = "audio", cache_dir: str = None, threads: int | None = None) -> str:
     """
     Transcribe audio file using whisper.cpp CLI with caching and format conversion.
 
@@ -388,6 +398,7 @@ def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, f
         format_output: If True, return formatted output with speaker labels
         file_name: Name of the file for the formatted output header
         cache_dir: If provided, save chunk cache inside this directory instead of global CACHE_DIR
+        threads: whisper.cpp CPU threads for this process. Defaults to all cores.
 
     Returns:
         Transcribed text (raw or formatted based on format_output)
@@ -428,20 +439,25 @@ def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, f
         raise FileNotFoundError(f"Whisper model not found at {model_path}")
 
     # 3. Audio Conversion (Ensure 16kHz WAV for whisper.cpp)
-    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_wav:
-        converted_wav = tmp_wav.name
+    converted_wav = audio_path
+    owns_converted_wav = False
         
     try:
         if is_cancelled():
             return ""
 
-        # Convert to 16kHz mono WAV using ffmpeg
-        conv_cmd = [
-            "ffmpeg", "-y", "-i", str(audio_path),
-            "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
-            converted_wav
-        ]
-        subprocess.run(conv_cmd, capture_output=True, check=True)
+        # Pipeline chunks are already 16 kHz mono PCM WAV. Avoiding another
+        # ffmpeg process per chunk removes a major source of disk/CPU pressure.
+        if not _is_whisper_ready_wav(audio_path):
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_wav:
+                converted_wav = tmp_wav.name
+            owns_converted_wav = True
+            conv_cmd = [
+                "ffmpeg", "-y", "-i", str(audio_path),
+                "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+                converted_wav
+            ]
+            subprocess.run(conv_cmd, capture_output=True, check=True)
 
         if is_cancelled():
             return ""
@@ -452,15 +468,14 @@ def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, f
             tmp_txt_name = tmp_out.name
 
         try:
-            # Use half the cores if we expect parallel runs to avoid contention
-            threads = max(1, os.cpu_count() // 2)
+            whisper_threads = threads if threads is not None else (os.cpu_count() or 1)
             
             cmd = [
                 str(whisper_bin),
                 "-m", str(model_path),
                 "-f", converted_wav,
-                "-l", "tl",
-                "-t", str(threads),
+                "-l", os.environ.get("WHISPER_LANGUAGE", "tl"),
+                "-t", str(max(1, whisper_threads)),
                 "-fa",
                 "-otxt",
                 "-of", output_base
@@ -520,5 +535,5 @@ def transcribe(audio_path: str, prompt: str = "", format_output: bool = False, f
                 os.remove(tmp_txt_name)
     
     finally:
-        if os.path.exists(converted_wav):
+        if owns_converted_wav and os.path.exists(converted_wav):
             os.remove(converted_wav)
