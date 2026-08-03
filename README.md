@@ -57,6 +57,14 @@ brew install pango
 ollama pull llama3.2:3b
 ```
 
+### Low-memory tuning and language context
+
+On macOS, transcription uses one Whisper worker by default so an 8 GB unified-memory machine does not load two copies of the model at once. To opt into parallel workers on a higher-memory Mac, set `WHISPER_TRANSCRIBE_WORKERS=2` before starting the server.
+
+The default recognition language is Tagalog (`tl`), which is helpful for Tagalog/Bikol/English recordings. You can change it with `WHISPER_LANGUAGE` and provide organization-specific vocabulary without hard-coding it into every meeting using `WHISPER_INITIAL_PROMPT`.
+
+Long meeting records use a local map–reduce pipeline. The defaults use a 4,096-token Ollama context; advanced users can tune `WHISPER_OLLAMA_CONTEXT_TOKENS`, `WHISPER_SUMMARY_CHUNK_TOKENS`, and `WHISPER_SUMMARY_REDUCE_TOKENS` if their installed model and memory permit it.
+
 ### HuggingFace Token (for Speaker Diarization)
 
 Speaker diarization requires a HuggingFace token for the pyannote models:
