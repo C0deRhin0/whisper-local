@@ -172,14 +172,15 @@ HTML_TEMPLATE = """
             --success: #3fb950;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        html { background-color: #0d1117 !important; }
+        html { height: 100%; background-color: #0d1117 !important; }
         body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: #0d1117;
             background: linear-gradient(135deg, #0d1117 0%, #050608 100%) fixed;
-            min-height: 100vh;
+            height: 100%;
+            overflow: hidden;
             color: var(--text-primary);
-            line-height: 1.6;
+            line-height: 1.45;
         }
         
         button { cursor: pointer; border: none; border-radius: 6px; font-weight: 500; font-size: 14px; padding: 8px 16px; transition: opacity 0.2s ease; font-family: inherit; }
@@ -190,39 +191,109 @@ HTML_TEMPLATE = """
         .btn-success { background-color: var(--success); color: #ffffff; }
         .btn-danger { background-color: var(--danger); color: #ffffff; }
 
-        .app-container { display: flex; flex-direction: column; min-height: 100vh; }
-        header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-panel); }
-        .banner { font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0; }
+        .app-container { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+        header { flex: 0 0 auto; padding: 10px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-panel); }
+        .banner { font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0; }
         .banner span { color: var(--accent-blue); }
         
-        .app-main { display: flex; flex-direction: column; gap: 24px; padding: 24px; max-width: 1200px; margin: 0 auto; width: 100%; flex: 1; }
-        @media (min-width: 768px) {
-            .app-main { flex-direction: row; }
-            .panel-left, .panel-right { flex: 1; min-width: 0; }
+        .app-main {
+            display: grid;
+            grid-template-columns: 1fr;
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 16px;
+            padding: 16px;
+            max-width: 1440px;
+            margin: 0 auto;
+            width: 100%;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
         }
+        .panel-left {
+            grid-column: 1 / -1;
+            display: flex !important;
+            flex-direction: column;
+            gap: 12px !important;
+            padding: 14px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .panel-right { grid-column: 1 / -1; min-width: 0; min-height: 0; }
+        .panel-right > .panel { height: 100%; min-height: 0; }
         
-        .panel { background-color: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; display: flex; flex-direction: column; }
-        .card { background-color: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 16px; position: relative; }
+        .panel { background-color: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+        .panel > h2 { margin-bottom: 9px !important; font-size: 16px !important; line-height: 1.25; }
+        .card { background-color: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 12px; position: relative; }
+
+        .task-tabs {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px;
+            width: fit-content;
+            max-width: 100%;
+            margin: 0 auto 2px;
+            background: var(--bg-page);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .task-tab {
+            padding: 7px 16px;
+            color: var(--text-muted);
+            background: transparent;
+            white-space: nowrap;
+        }
+        .task-tab:hover:not(:disabled) { color: var(--text-primary); opacity: 1; }
+        .task-tab.active { color: #fff; background: var(--accent-blue); }
+        .task-panel {
+            display: none !important;
+            width: 100%;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            box-shadow: none;
+            align-items: stretch;
+            gap: 12px 16px;
+        }
+        .task-panel.active { display: grid !important; }
+        .task-panel > h2 { display: none; }
+        #upload-panel { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        #record-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 820px; }
+        #text-panel { grid-template-columns: minmax(240px, 0.8fr) minmax(360px, 1.6fr); max-width: 960px; }
+        .task-panel > button {
+            grid-column: 1 / -1;
+            justify-self: center;
+            width: min(280px, 100%) !important;
+            min-height: 38px;
+        }
+        #record-panel .note { grid-column: 1 / -1; margin-top: -5px; text-align: center; }
         
-        .file-input-wrapper { margin-top: 16px; margin-bottom: 16px; }
+        .file-input-wrapper { height: 82px; margin: 0 !important; }
         .file-label {
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            padding: 40px; border: 1px dashed var(--border); border-radius: 6px; cursor: pointer;
+            height: 100%; padding: 10px !important; border: 1px dashed var(--border); border-radius: 6px; cursor: pointer;
             transition: all 0.3s; background-color: var(--bg-page); color: var(--text-muted);
         }
         .file-label:hover { border-color: var(--accent-blue); }
-        .file-selected { padding: 12px; background: rgba(0,150,255,0.1); border-radius: 6px; margin-top: 12px; text-align: center; color: var(--accent-blue); display: none; }
+        .file-selected { padding: 8px; background: rgba(0,150,255,0.1); border-radius: 6px; margin-top: 6px; text-align: center; color: var(--accent-blue); display: none; }
+        .option-group { min-height: 82px; margin: 0 !important; padding: 10px 12px !important; display: flex; flex-direction: column; justify-content: center; }
+        .option-group > div { flex-wrap: wrap; row-gap: 4px !important; }
+        .text-entry { height: 82px; margin: 0 !important; display: flex; flex-direction: column; }
+        #textInput { flex: 1; min-height: 0 !important; max-height: none !important; resize: none !important; }
         
-        .processing { text-align: center; padding: 20px; }
+        .processing { text-align: center; padding: 12px; }
         .spinner { border: 3px solid rgba(255, 255, 255, 0.1); width: 32px; height: 32px; border-radius: 50%; border-left-color: var(--accent-blue); animation: spin 1s linear infinite; margin: 0 auto 16px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        .progress-container { margin: 24px 0; }
+        .progress-container { margin: 14px 0; }
         .progress-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
         .progress-bar { width: 100%; height: 8px; background: var(--bg-page); border-radius: 4px; overflow: hidden; border: 1px solid var(--border); }
         .progress-fill { height: 100%; background-color: var(--accent-blue); width: 0%; transition: width 0.3s ease; }
         
-        .timeline { background: var(--bg-page); border-radius: 6px; padding: 16px; margin-top: 20px; text-align: left; font-size: 13px; border: 1px solid var(--border); max-height: 150px; overflow-y: auto; }
+        .timeline { background: var(--bg-page); border-radius: 6px; padding: 10px; margin-top: 10px; text-align: left; font-size: 12px; border: 1px solid var(--border); max-height: 110px; overflow-y: auto; }
         .timeline-title { opacity: 0.6; margin-bottom: 12px; text-transform: uppercase; font-size: 11px; }
         .timeline-item { display: flex; margin-bottom: 8px; }
         .timeline-item:last-child { margin-bottom: 0; }
@@ -230,16 +301,34 @@ HTML_TEMPLATE = """
         .timeline-item.done .timeline-dot { background: var(--success); }
         .timeline-item.current .timeline-dot { background: var(--accent-blue); }
         
-        .result-content { background: var(--bg-page); border: 1px solid var(--border); border-radius: 6px; padding: 16px; white-space: pre-wrap; max-height: 250px; overflow-y: auto; font-size: 14px; margin-bottom: 16px; color: var(--text-primary); }
+        #result-card { flex: 1; min-height: 0; grid-template-columns: 1fr 1fr; gap: 12px; }
+        #result-card > div { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
+        #result-card > div:nth-child(2) { margin-top: 0 !important; }
+        .result-content { background: var(--bg-page); border: 1px solid var(--border); border-radius: 6px; padding: 12px; white-space: pre-wrap; height: 100%; min-height: 90px; max-height: none; overflow-y: auto; font-size: 13px; margin-bottom: 0; color: var(--text-primary); }
+        #processing-card, #error-card { width: 100%; border: 0; background: transparent; padding: 0; }
         
-        .note { font-size: 12px; color: var(--text-muted); margin-top: 12px; }
+        .note { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
         input[type="number"] { width: 80px; padding: 8px; background: var(--bg-page); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px; }
         input[type="file"] { display: none; }
         
-        .footer { text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px; border-top: 1px solid var(--border); margin-top: auto; }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg-page); }
         ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        @media (max-width: 900px), (max-height: 650px) {
+            html, body { height: auto; min-height: 100%; overflow-y: auto; }
+            .app-container { height: auto; min-height: 100dvh; overflow: visible; }
+            .app-main { display: flex; flex-direction: column; overflow: visible; padding: 10px; }
+            .panel-left { display: flex !important; padding: 12px; }
+            .panel-right { min-height: 320px; }
+            .task-tabs { width: 100%; overflow-x: auto; }
+            .task-tab { flex: 1 0 auto; }
+            .task-panel.active { display: flex !important; align-items: stretch; }
+            .file-input-wrapper, .text-entry { height: auto; min-height: 82px; }
+            #result-card { grid-template-columns: 1fr; }
+            #result-card > div:nth-child(2) { margin-top: 12px !important; }
+            .result-content { max-height: 250px; }
+        }
     </style>
 </head>
 <body>
@@ -251,8 +340,14 @@ HTML_TEMPLATE = """
         
         <main class="app-main">
             <div class="panel-left" style="display: flex; flex-direction: column; gap: 24px;">
+                <div class="task-tabs" id="task-tabs" role="tablist" aria-label="Choose a task">
+                    <button class="task-tab active" type="button" role="tab" aria-selected="true" data-panel="upload-panel">Upload Audio</button>
+                    <button class="task-tab" type="button" role="tab" aria-selected="false" data-panel="record-panel">Record Audio</button>
+                    <button class="task-tab" type="button" role="tab" aria-selected="false" data-panel="text-panel">Analyze Transcript</button>
+                </div>
+
                 <!-- ===== PANEL 1: Upload Audio ===== -->
-                <div class="panel" id="upload-panel">
+                <div class="panel task-panel active" id="upload-panel" role="tabpanel">
                     <h2 style="margin: 0 0 16px 0; font-size: 18px;">Upload Audio</h2>
 
                     <div class="file-input-wrapper">
@@ -265,7 +360,7 @@ HTML_TEMPLATE = """
                         <div class="file-selected" id="fileSelected"></div>
                     </div>
 
-                    <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
+                    <div class="option-group" style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
                         <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Mode:</label>
                         <div style="display: flex; gap: 12px;">
                             <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
@@ -279,7 +374,7 @@ HTML_TEMPLATE = """
                         </div>
                     </div>
 
-                    <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
+                    <div class="option-group" style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
                         <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Transcript Format:</label>
                         <div style="display: flex; gap: 12px;">
                             <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
@@ -297,10 +392,10 @@ HTML_TEMPLATE = """
                 </div>
 
                 <!-- ===== PANEL 2: Record Audio ===== -->
-                <div class="panel" id="record-panel">
+                <div class="panel task-panel" id="record-panel" role="tabpanel">
                     <h2 style="margin: 0 0 16px 0; font-size: 18px;">Record Audio</h2>
 
-                    <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
+                    <div class="option-group" style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
                         <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Mode:</label>
                         <div style="display: flex; gap: 12px;">
                             <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
@@ -314,7 +409,7 @@ HTML_TEMPLATE = """
                         </div>
                     </div>
 
-                    <div style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
+                    <div class="option-group" style="margin: 12px 0; padding: 12px; background: var(--bg-page); border-radius: 6px; border: 1px solid var(--border);">
                         <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 8px;">Transcript Format:</label>
                         <div style="display: flex; gap: 12px;">
                             <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
@@ -333,7 +428,7 @@ HTML_TEMPLATE = """
                 </div>
 
                 <!-- ===== PANEL 3: Analyze Transcript ===== -->
-                <div class="panel" id="text-panel">
+                <div class="panel task-panel" id="text-panel" role="tabpanel">
                     <h2 style="margin: 0 0 16px 0; font-size: 18px;">Analyze Transcript</h2>
 
                     <div class="file-input-wrapper" style="margin-bottom: 12px;">
@@ -345,7 +440,7 @@ HTML_TEMPLATE = """
                         <div class="file-selected" id="textFileSelected" style="display:none; font-size: 12px;"></div>
                     </div>
 
-                    <div style="margin-bottom: 12px;">
+                    <div class="text-entry" style="margin-bottom: 12px;">
                         <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 4px;">Paste transcript text:</label>
                         <textarea id="textInput" style="width: 100%; min-height: 80px; max-height: 200px; padding: 8px; background: var(--bg-page); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px; font-family: inherit; font-size: 13px; resize: vertical; box-sizing: border-box;" placeholder="Paste your transcript here..."></textarea>
                     </div>
@@ -410,22 +505,18 @@ HTML_TEMPLATE = """
                             </div>
                             <div id="transcript-content" class="result-content"></div>
                         </div>
-                        </div>
                     </div>
                 </div>
             </div>
         </main>
         
-        <div class="footer">
-            <div>100% Local - Your data never leaves this device</div>
-            <div id="server-ip" style="margin-top: 4px;"></div>
-        </div>
     </div>
 
     <script>
         var currentSummary = '';
         var currentTranscript = '';
         var pollInterval = null;
+        var activeTaskPanel = 'upload-panel';
 
         var authToken = window.localStorage.getItem('whisperLocalAuthToken') || '';
 
@@ -445,9 +536,24 @@ HTML_TEMPLATE = """
                     window.localStorage.setItem('whisperLocalAuthToken', authToken);
                 }
             }
-            if(d.lan_enabled && d.ip && d.ip !== '127.0.0.1'){
-                document.getElementById('server-ip').textContent = 'Access from other devices: http://' + d.ip + ':8080';
-            }
+        });
+
+        function activateTaskPanel(panelId) {
+            activeTaskPanel = panelId;
+            document.querySelectorAll('.task-panel').forEach(function(panel) {
+                panel.classList.toggle('active', panel.id === panelId);
+            });
+            document.querySelectorAll('.task-tab').forEach(function(tab) {
+                var selected = tab.dataset.panel === panelId;
+                tab.classList.toggle('active', selected);
+                tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+            });
+        }
+
+        document.querySelectorAll('.task-tab').forEach(function(tab) {
+            tab.addEventListener('click', function() {
+                activateTaskPanel(tab.dataset.panel);
+            });
         });
 
         // ===== File Upload =====
@@ -571,15 +677,15 @@ HTML_TEMPLATE = """
         }
 
         function hideInputPanels() {
-            document.getElementById('upload-panel').style.display = 'none';
-            document.getElementById('record-panel').style.display = 'none';
-            document.getElementById('text-panel').style.display = 'none';
+            document.getElementById('task-tabs').style.display = 'none';
+            document.querySelectorAll('.task-panel').forEach(function(panel) {
+                panel.classList.remove('active');
+            });
         }
 
         function showInputPanels() {
-            document.getElementById('upload-panel').style.display = 'flex';
-            document.getElementById('record-panel').style.display = 'flex';
-            document.getElementById('text-panel').style.display = 'flex';
+            document.getElementById('task-tabs').style.display = 'flex';
+            activateTaskPanel(activeTaskPanel);
         }
 
         // ===== UI State Functions =====
@@ -717,7 +823,7 @@ HTML_TEMPLATE = """
             currentTranscript = transcript;
             
             document.getElementById('no-result').style.display = 'none';
-            document.getElementById('result-card').style.display = 'block';
+            document.getElementById('result-card').style.display = 'grid';
             
             document.getElementById('summary-content').innerText = summary || 'No summary available (transcribe-only mode)';
             document.getElementById('transcript-content').innerText = transcript || 'No transcript available';
