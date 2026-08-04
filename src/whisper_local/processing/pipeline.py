@@ -4,6 +4,7 @@ import tempfile
 import shutil
 import concurrent.futures
 import json
+import platform
 
 # Internal imports
 from whisper_local.audio.transcriber import _get_file_hash, format_transcript, transcribe
@@ -16,6 +17,21 @@ from whisper_local.processing.chunk_and_merge import process_full_transcript
 CHUNK_DURATION_SECONDS = 180 
 BASE_DIR = PROJECT_ROOT
 DEFAULT_LLM_MODEL = "llama3.2:3b"  # Lightweight 3b model for faster inference
+
+
+def _transcription_workers() -> int:
+    """Choose a safe worker count; override explicitly with an environment variable.
+
+    Two whisper.cpp/Metal processes can exceed 8 GB unified memory on an M1.
+    One process is the reliable default on macOS; parallel workers remain opt-in.
+    """
+    configured = os.environ.get("WHISPER_TRANSCRIBE_WORKERS")
+    if configured:
+        try:
+            return max(1, int(configured))
+        except ValueError:
+            _log("Ignoring invalid WHISPER_TRANSCRIBE_WORKERS; using safe default.")
+    return 1 if platform.system() == "Darwin" else 2
 
 def _log(msg: str):
     print(f"[Pipeline] {msg}")
@@ -159,20 +175,44 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
         elif transcript_format == 'formatted' and not formatted_transcript_path.exists():
             cache_valid = False
         else:
+            # A transcribe-only run deliberately caches an empty summary. Later
+            # full runs should reuse that expensive transcript, not return an
+            # empty document or transcribe the audio all over again.
+            if mode != 'transcribe_only' and not cached_data.get('summary', '').strip():
+                raw_transcript = cached_data.get('raw_transcript', '')
+                if raw_transcript:
+                    set_phase(4, 1)
+                    log_message("Cached transcript found — generating meeting record...")
+                    summary = process_full_transcript(raw_transcript, model=DEFAULT_LLM_MODEL)
+                    if is_cancelled():
+                        return {"transcript": "", "raw_transcript": "", "summary": "", "output_file": ""}
+                    update_chunk()
+                    cached_data['summary'] = summary
+                    summary_path = pathlib.Path(cached_data.get('output_file') or cache_folder / 'summary.md')
+                    summary_path.parent.mkdir(parents=True, exist_ok=True)
+                    summary_path.write_text(
+                        f"## Executive Summary\n```\n{summary}\n```\n\n## Raw Transcript\n```\n{raw_transcript}\n```\n",
+                        encoding='utf-8',
+                    )
+                    cached_data['output_file'] = str(summary_path)
+                    with open(cache_path, 'w', encoding='utf-8') as f:
+                        json.dump(cached_data, f)
             if transcript_format == 'formatted':
-                return {
+                result = {
                     "transcript": cached_data.get('formatted_transcript', ''),
                     "raw_transcript": cached_data.get('raw_transcript', ''),
                     "summary": cached_data.get('summary', ''),
                     "output_file": cached_data.get('output_file', '')
                 }
             else:
-                return {
+                result = {
                     "transcript": cached_data.get('raw_transcript', ''),
                     "raw_transcript": cached_data.get('raw_transcript', ''),
                     "summary": cached_data.get('summary', ''),
                     "output_file": cached_data.get('output_file', '')
                 }
+            complete()
+            return result
     if not cache_valid:
         _log(f"Cache miss in {cache_folder.name}/ — will re-process.")
         log_message(f"Processing audio: {cache_folder.name}")
@@ -202,14 +242,22 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
         
         # Phase 3: Parallel Transcription
         transcripts_dict = {}
-        initial_context = "Meeting regarding AI analytics, Firebase, SQL, Cloud Functions, and Digital Ocean in English, Tagalog, and Bicolano dialect."
+        # A generic context helps code-switched recognition without planting
+        # product names that may not actually have been said in this meeting.
+        initial_context = os.environ.get(
+            "WHISPER_INITIAL_PROMPT",
+            "A company meeting with English, Tagalog, and Bikol code-switching. Preserve names, acronyms, and technical terms.",
+        )
+
+        workers = min(_transcription_workers(), total_chunks)
+        threads_per_worker = max(1, (os.cpu_count() or 1) // workers)
 
         def transcribe_task(idx, path, prompt):
             """Transcribe a single chunk with error handling."""
             try:
                 _log(f"Transcribing chunk {idx + 1}/{total_chunks}...")
                 # Pass cache_folder so per-chunk cache goes inside audio folder
-                text = transcribe(path, prompt=prompt, cache_dir=str(cache_folder))
+                text = transcribe(path, prompt=prompt, cache_dir=str(cache_folder), threads=threads_per_worker)
                 return idx, text, None
             except Exception as e:
                 _log(f"Error transcribing chunk {idx + 1}: {e}")
@@ -224,7 +272,9 @@ def _process_audio(audio_path: str, chunk_duration: int = CHUNK_DURATION_SECONDS
         # shutdown with wait=False,cancel_futures=True so remaining queued chunks
         # are NOT executed, letting the pipeline stop immediately.
         import sys as _sys
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        _log(f"Using {workers} transcription worker(s), {threads_per_worker} thread(s) each.")
+        log_message(f"Transcribing with {workers} memory-safe worker(s)...")
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=workers)
         try:
             futures = [executor.submit(transcribe_task, i, path, initial_context)
                        for i, path in enumerate(chunk_paths)]
